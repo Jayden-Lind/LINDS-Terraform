@@ -1,0 +1,5 @@
+.terraform.lock.hcl
+.terraform/*
+vars.auto.pkrvars.hcl
+terraform.tfvars
+terraform.tfstate*
