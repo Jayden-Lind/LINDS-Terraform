@@ -11,6 +11,7 @@ source "vsphere-iso" "this" {
 
   ssh_username = "jayden"
   ssh_password = var.ssh_password
+  firmware = "efi"
 
   CPUs =             2
   RAM =              4096
@@ -35,7 +36,7 @@ source "vsphere-iso" "this" {
   }
 
   boot_command = [
-    "<tab> text inst.ks=cdrom:/dev/sr1:/ks.cfg<enter><wait>",
+    "<up> e <down><down><end> inst.ks=cdrom:/dev/sr1:/ks.cfg<leftCtrlOn>x<leftCtrlOff><wait>",
   ]
 }
 

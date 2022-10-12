@@ -78,14 +78,25 @@ resource "vsphere_virtual_machine" "JD-Kube-01" {
   num_cpus            = 2
   memory              = 8192
   firmware            = "efi"
-  guest_id            = "rhel9_64Guest"
+  guest_id            = "centos8_64Guest"
   sync_time_with_host = false
+  clone {
+    template_uuid = local.jd_template
+    customize {
+      linux_options {
+        host_name    = "JD-Kube-01"
+        domain       = "linds.com.au"
+        hw_clock_utc = false
+      }
+      network_interface {}
+    }
+  }
   network_interface {
     network_id = data.vsphere_network.DEV.id
   }
   disk {
     label            = "disk0"
-    size             = 16
+    size             = 20
     thin_provisioned = false
     keep_on_remove   = true
     datastore_id     = vsphere_vmfs_datastore.jd-datastore.id
@@ -103,9 +114,20 @@ resource "vsphere_virtual_machine" "JD-Kube-02" {
   memory              = 4096
   firmware            = "efi"
   sync_time_with_host = false
-  guest_id            = "rhel9_64Guest"
+  guest_id            = "centos8_64Guest"
   network_interface {
     network_id = data.vsphere_network.DEV.id
+  }
+  clone {
+    template_uuid = local.jd_template
+    customize {
+      linux_options {
+        host_name    = "JD-Kube-02"
+        domain       = "linds.com.au"
+        hw_clock_utc = false
+      }
+      network_interface {}
+    }
   }
   disk {
     label            = "disk0"
@@ -127,8 +149,11 @@ resource "vsphere_virtual_machine" "JD-Kube-03" {
   memory              = 4096
   firmware            = "efi"
   sync_time_with_host = false
+  guest_id = "centos8_64Guest"
   network_interface {
     network_id = data.vsphere_network.DEV.id
+    mac_address = "00:50:56:ae:87:fd"
+    use_static_mac = true
   }
   disk {
     label            = "disk0"
@@ -136,6 +161,17 @@ resource "vsphere_virtual_machine" "JD-Kube-03" {
     thin_provisioned = false
     keep_on_remove   = true
     datastore_id     = vsphere_vmfs_datastore.jd-datastore.id
+  }
+  clone {
+    template_uuid = local.jd_template
+    customize {
+      linux_options {
+        host_name    = "JD-Kube-03"
+        domain       = "linds.com.au"
+        hw_clock_utc = false
+      }
+      network_interface {}
+    }
   }
   lifecycle {
     prevent_destroy = true

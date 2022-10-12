@@ -4,7 +4,8 @@ resource "vsphere_virtual_machine" "LINDS-Kube-02" {
   datastore_id     = vsphere_vmfs_datastore.linds-datastore.id
   num_cpus         = 2
   memory           = 4096
-  guest_id         = "rhel9_64Guest"
+  guest_id         = "centos8_64Guest"
+  firmware            = "efi"
   disk {
     label            = "disk0"
     thin_provisioned = true
@@ -141,6 +142,18 @@ resource "vsphere_virtual_machine" "LINDS-Kube-01" {
   memory              = 4096
   firmware            = "efi"
   sync_time_with_host = false
+  guest_id = "centos8_64Guest"
+  clone {
+    template_uuid = local.linds_template
+    customize {
+      linux_options {
+        host_name    = "LINDS-Kube-01"
+        domain       = "linds.com.au"
+        hw_clock_utc = false
+      }
+      network_interface {}
+    }
+  }
   network_interface {
     network_id = data.vsphere_network.LINDS-SERVER.id
   }
