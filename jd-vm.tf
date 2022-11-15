@@ -31,7 +31,7 @@ resource "vsphere_virtual_machine" "JD-Plex-01" {
   memory                  = 4096
   guest_id                = "rhel9_64Guest"
   sync_time_with_host     = false
-  efi_secure_boot_enabled = true
+  efi_secure_boot_enabled = false
   network_interface {
     network_id = data.vsphere_network.jd_network.id
   }
