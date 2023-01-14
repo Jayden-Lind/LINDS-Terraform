@@ -16,7 +16,7 @@ resource "vsphere_virtual_machine" "LINDS-Kube-02" {
     network_id = data.vsphere_network.LINDS-SERVER.id
   }
   clone {
-    template_uuid = local.linds_template
+    template_uuid = local.linds_centos_9
     customize {
       linux_options {
         host_name    = "LINDS-Kube-02"
@@ -144,7 +144,7 @@ resource "vsphere_virtual_machine" "LINDS-Kube-01" {
   sync_time_with_host = false
   guest_id = "centos8_64Guest"
   clone {
-    template_uuid = local.linds_template
+    template_uuid = local.linds_centos_9
     customize {
       linux_options {
         host_name    = "LINDS-Kube-01"
@@ -243,7 +243,7 @@ resource "vsphere_virtual_machine" "LINDS-Torrent" {
   num_cpus                = 6
   memory                  = 4096
   sync_time_with_host     = false
-  efi_secure_boot_enabled = true
+  efi_secure_boot_enabled = false
   network_interface {
     network_id = data.vsphere_network.VLAN-36.id
   }

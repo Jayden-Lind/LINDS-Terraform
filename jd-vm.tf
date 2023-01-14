@@ -81,7 +81,7 @@ resource "vsphere_virtual_machine" "JD-Kube-01" {
   guest_id            = "centos8_64Guest"
   sync_time_with_host = false
   clone {
-    template_uuid = local.jd_template
+    template_uuid = local.jd_centos_9
     customize {
       linux_options {
         host_name    = "JD-Kube-01"
@@ -119,7 +119,7 @@ resource "vsphere_virtual_machine" "JD-Kube-02" {
     network_id = data.vsphere_network.DEV.id
   }
   clone {
-    template_uuid = local.jd_template
+    template_uuid = local.jd_centos_9
     customize {
       linux_options {
         host_name    = "JD-Kube-02"
@@ -163,7 +163,7 @@ resource "vsphere_virtual_machine" "JD-Kube-03" {
     datastore_id     = vsphere_vmfs_datastore.jd-datastore.id
   }
   clone {
-    template_uuid = local.jd_template
+    template_uuid = local.jd_centos_9
     customize {
       linux_options {
         host_name    = "JD-Kube-03"
@@ -275,8 +275,8 @@ resource "vsphere_virtual_machine" "JD-OPNsense-01" {
   latency_sensitivity = "high"
   memory_reservation  = "4096"
   cpu_reservation     = "7992"
-  vvtd_enabled = true
-  pci_device_id       = ["0000:04:00.0"]
+  vvtd_enabled        = false
+  pci_device_id       = ["0000:08:00.1"]
   network_interface {
     network_id = data.vsphere_network.VLAN-Trunk.id
   }
