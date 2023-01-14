@@ -44,13 +44,23 @@ variable "jd_network_name" {
   type        = string
 }
 
-variable "jd_template_name" {
-  description = "CentOS name (ie: image_path)"
+variable "jd_centos_9" {
+  description = "CentOS 9 name (ie: image_path)"
   type        = string
 }
 
-variable "linds_template_name" {
-  description = "CentOS name (ie: image_path)"
+variable "jd_centos_8" {
+  description = "CentOS 8 name (ie: image_path)"
+  type        = string
+}
+
+variable "linds_centos_9" {
+  description = "CentOS 9 name (ie: image_path)"
+  type        = string
+}
+
+variable "linds_centos_8" {
+  description = "CentOS 8 name (ie: image_path)"
   type        = string
 }
 

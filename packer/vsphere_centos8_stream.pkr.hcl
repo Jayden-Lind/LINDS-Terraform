@@ -1,4 +1,4 @@
-source "vsphere-iso" "centos9" {
+source "vsphere-iso" "centos8" {
   vcenter_server    = var.vsphere_server
   username          = var.vsphere_user
   password          = var.vsphere_password
@@ -6,7 +6,7 @@ source "vsphere-iso" "centos9" {
   host              = var.host
   insecure_connection  = true
 
-  vm_name = "CentOS 9"
+  vm_name = "CentOS 8"
   guest_os_type = "centos8_64Guest"
 
   ssh_username = "jayden"
@@ -25,10 +25,10 @@ source "vsphere-iso" "centos9" {
   }
 
   cd_files = [
-    "./ks.cfg",
+    "./ks8.cfg",
   ]
 
-  iso_paths = ["[${var.datastore}] ISO/CentOS-Stream-9.iso"]
+  iso_paths = ["[${var.datastore}] ISO/CentOS-Stream-8.iso"]
 
   network_adapters {
     network =  var.network_name
@@ -36,12 +36,12 @@ source "vsphere-iso" "centos9" {
   }
 
   boot_command = [
-    "<up> e <down><down><end> inst.ks=cdrom:/dev/sr1:/ks.cfg<leftCtrlOn>x<leftCtrlOff><wait>",
+    "<up> e <down><down><end> inst.ks=cdrom:/dev/sr1:/ks8.cfg<leftCtrlOn>x<leftCtrlOff><wait>",
   ]
 }
 
 build {
   sources  = [
-    "source.vsphere-iso.centos9"
+    "source.vsphere-iso.centos8"
   ]
 }

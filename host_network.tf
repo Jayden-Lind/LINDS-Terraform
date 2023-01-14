@@ -1,8 +1,8 @@
 resource "vsphere_host_virtual_switch" "jd-switch" {
   name                   = "vSwitch0"
   host_system_id         = data.vsphere_host.JD-ESXi.id
-  network_adapters       = ["vmnic5"]
-  active_nics            = ["vmnic5"]
+  network_adapters       = ["vmnic8"]
+  active_nics            = ["vmnic8"]
   standby_nics           = []
   allow_forged_transmits = true
   allow_mac_changes      = true
@@ -39,7 +39,7 @@ resource "vsphere_host_port_group" "JD_MANAGEMENT" {
   vlan_id             = 0
   notify_switches     = true
   standby_nics = [
-    "vmnic5",
+    "vmnic8",
   ]
   teaming_policy = "loadbalance_srcid"
   failback       = true
