@@ -347,3 +347,93 @@ resource "vsphere_virtual_machine" "JD-Torrent-01" {
 #     prevent_destroy = true
 #   }
 # }
+
+resource "vsphere_virtual_machine" "JD-Ceph-01" {
+  name                = "JD-Ceph-01"
+  resource_pool_id    = local.jd_host
+  datastore_id        = vsphere_vmfs_datastore.jd-datastore.id
+  num_cpus            = 2
+  memory              = 16384
+  firmware            = "efi"
+  sync_time_with_host = false
+  guest_id = "centos8_64Guest"
+  network_interface {
+    network_id = data.vsphere_network.DEV.id
+  }
+  disk {
+    label            = "disk0"
+    size             = 16
+    thin_provisioned = false
+    keep_on_remove   = true
+    datastore_id     = vsphere_vmfs_datastore.jd-datastore.id
+  }
+
+  disk {
+    label            = "disk1"
+    size             = 100
+    thin_provisioned = false
+    keep_on_remove   = true
+    datastore_id     = vsphere_vmfs_datastore.jd-datastore.id
+    unit_number      = 1
+  }
+
+  clone {
+    template_uuid = local.jd_centos_8
+    customize {
+      linux_options {
+        host_name    = "jd-ceph-01"
+        domain       = "linds.com.au"
+        hw_clock_utc = false
+      }
+      network_interface {}
+    }
+  }
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "vsphere_virtual_machine" "JD-Ceph-02" {
+  name                = "JD-Ceph-02"
+  resource_pool_id    = local.jd_host
+  datastore_id        = vsphere_vmfs_datastore.jd-datastore.id
+  num_cpus            = 2
+  memory              = 8192
+  firmware            = "efi"
+  sync_time_with_host = false
+  guest_id = "centos8_64Guest"
+  network_interface {
+    network_id = data.vsphere_network.DEV.id
+  }
+  disk {
+    label            = "disk0"
+    size             = 16
+    thin_provisioned = false
+    keep_on_remove   = true
+    datastore_id     = vsphere_vmfs_datastore.jd-datastore.id
+  }
+
+  disk {
+    label            = "disk1"
+    size             = 100
+    thin_provisioned = false
+    keep_on_remove   = true
+    datastore_id     = vsphere_vmfs_datastore.jd-datastore.id
+    unit_number      = 1
+  }
+
+  clone {
+    template_uuid = local.jd_centos_8
+    customize {
+      linux_options {
+        host_name    = "jd-ceph-02"
+        domain       = "linds.com.au"
+        hw_clock_utc = false
+      }
+      network_interface {}
+    }
+  }
+  lifecycle {
+    prevent_destroy = true
+  }
+}

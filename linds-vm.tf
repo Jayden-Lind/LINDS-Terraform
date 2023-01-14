@@ -295,3 +295,46 @@ resource "vsphere_virtual_machine" "LINDS-OPNsense-01" {
     prevent_destroy = true
   }
 }
+
+resource "vsphere_virtual_machine" "LINDS-Ceph-01" {
+  name                = "LINDS-Ceph-01"
+  resource_pool_id    = local.linds_host
+  datastore_id        = vsphere_vmfs_datastore.linds-datastore.id
+  num_cpus            = 2
+  memory              = 4096
+  firmware            = "efi"
+  sync_time_with_host = false
+  guest_id = "centos8_64Guest"
+  clone {
+    template_uuid = local.linds_centos_8
+    customize {
+      linux_options {
+        host_name    = "linds-ceph-01"
+        domain       = "linds.com.au"
+        hw_clock_utc = false
+      }
+      network_interface {}
+    }
+  }
+  network_interface {
+    network_id = data.vsphere_network.LINDS-SERVER.id
+  }
+  disk {
+    label            = "disk0"
+    size             = 16
+    thin_provisioned = false
+    keep_on_remove   = true
+    datastore_id     = vsphere_vmfs_datastore.linds-datastore.id
+  }
+  disk {
+    label            = "disk1"
+    size             = 50
+    thin_provisioned = false
+    keep_on_remove   = true
+    datastore_id     = vsphere_vmfs_datastore.linds-datastore.id
+    unit_number      = 1
+  }
+  lifecycle {
+    prevent_destroy = true
+  }
+}
