@@ -1,0 +1,8 @@
+vsphere_server   = "xxxxxxxxxxxxx"
+vsphere_user     = "xxxxxxxxxxx@vsphere.local"
+vsphere_password = "xxxxxxxxxxx"
+datacenter       = "xxxxxxx"
+datastore        = "xxxxxxxxx"
+network_name     = "xxxxxxxxx"
+host             = "xxxxxx.xxxxx.com.au"
+ssh_password     = "xxxxxxxxx"
