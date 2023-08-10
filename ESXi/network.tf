@@ -1,50 +1,59 @@
 resource "vsphere_host_port_group" "VLAN_JD_TRUNK" {
   name                = "VLAN Trunk"
-  host_system_id      = data.vsphere_host.JD-ESXi.id
+  host_system_id      = vsphere_host.jd-esxi-01.id
   virtual_switch_name = vsphere_host_virtual_switch.jd-switch.name
   vlan_id             = 4095
 }
 
 resource "vsphere_host_port_group" "VLAN_JD_NATIVE" {
   name                = "Native VLAN"
-  host_system_id      = data.vsphere_host.JD-ESXi.id
+  host_system_id      = vsphere_host.jd-esxi-01.id
   virtual_switch_name = vsphere_host_virtual_switch.jd-switch.name
   vlan_id             = 0
 }
 
 resource "vsphere_host_port_group" "VLAN_JD_DMZ" {
   name                = "JD-DMZ"
-  host_system_id      = data.vsphere_host.JD-ESXi.id
+  host_system_id      = vsphere_host.jd-esxi-01.id
   virtual_switch_name = vsphere_host_virtual_switch.jd-switch.name
   vlan_id             = 60
 }
 
 resource "vsphere_host_port_group" "VLAN_JD_TORRENT" {
   name                = "VLAN 51 TORRENT"
-  host_system_id      = data.vsphere_host.JD-ESXi.id
+  host_system_id      = vsphere_host.jd-esxi-01.id
   virtual_switch_name = vsphere_host_virtual_switch.jd-switch.name
   vlan_id             = 51
 }
 
 resource "vsphere_host_port_group" "VLAN_JD_KUBE" {
   name                = "VLAN 52 KUBE"
-  host_system_id      = data.vsphere_host.JD-ESXi.id
+  host_system_id      = vsphere_host.jd-esxi-01.id
   virtual_switch_name = vsphere_host_virtual_switch.jd-switch.name
   vlan_id             = 52
 }
 
 resource "vsphere_host_port_group" "VLAN_JD_DEV" {
   name                = "VLAN 53 DEV"
-  host_system_id      = data.vsphere_host.JD-ESXi.id
+  host_system_id      = vsphere_host.jd-esxi-01.id
   virtual_switch_name = vsphere_host_virtual_switch.jd-switch.name
   vlan_id             = 53
 }
 
 resource "vsphere_host_port_group" "VLAN_JD_SERVER" {
   name                = "VLAN 55 Server"
-  host_system_id      = data.vsphere_host.JD-ESXi.id
+  host_system_id      = vsphere_host.jd-esxi-01.id
   virtual_switch_name = vsphere_host_virtual_switch.jd-switch.name
   vlan_id             = 55
+}
+
+resource "vsphere_host_port_group" "WAN" {
+  name                = "WAN"
+  host_system_id      = vsphere_host.jd-esxi-01.id
+  virtual_switch_name = vsphere_host_virtual_switch.jd-switch-wan.name
+  allow_forged_transmits = true
+  allow_mac_changes = true
+  allow_promiscuous = true
 }
 
 resource "vsphere_host_port_group" "VLAN_LINDS_CLIENT" {
@@ -76,7 +85,10 @@ resource "vsphere_host_port_group" "VLAN_LINDS_TRUNK" {
 }
 
 
-
+data "vsphere_network" "WAN" {
+  name          = vsphere_host_port_group.WAN.name
+  datacenter_id = data.vsphere_datacenter.dc.id
+}
 
 data "vsphere_network" "jd_network" {
   name          = vsphere_host_port_group.VLAN_JD_NATIVE.name

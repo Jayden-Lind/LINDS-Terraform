@@ -24,6 +24,16 @@ variable "jd-host" {
   type        = string
 }
 
+variable "jd-username" {
+  description = "ESXi Host Username"
+  type        = string
+}
+
+variable "jd-password" {
+  description = "ESXi Host Password"
+  type        = string
+}
+
 variable "linds-host" {
   description = "vSphere host"
   type        = string

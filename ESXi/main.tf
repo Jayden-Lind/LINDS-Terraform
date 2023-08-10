@@ -14,7 +14,7 @@ data "vsphere_datacenter" "dc" {
 }
 
 data "vsphere_host" "JD-ESXi" {
-  name          = var.jd-host
+  name          = vsphere_host.jd-esxi-01.hostname
   datacenter_id = data.vsphere_datacenter.dc.id
 }
 
@@ -34,12 +34,12 @@ data "vsphere_virtual_machine" "jd-centos-8" {
 }
 
 data "vsphere_virtual_machine" "linds-centos-9" {
-  name          = "/${var.datacenter}/vm/${var.linds_centos_9}"
+  name          = "/${var.datacenter}/vm/${var.jd_centos_9}"
   datacenter_id = data.vsphere_datacenter.dc.id
 }
 
 data "vsphere_virtual_machine" "linds-centos-8" {
-  name          = "/${var.datacenter}/vm/${var.linds_centos_8}"
+  name          = "/${var.datacenter}/vm/${var.jd_centos_8}"
   datacenter_id = data.vsphere_datacenter.dc.id
 }
 
@@ -50,8 +50,8 @@ locals {
   jd_centos_8         = data.vsphere_virtual_machine.jd-centos-8.id
   linds_datastore     = vsphere_vmfs_datastore.linds-datastore.id
   linds_host          = data.vsphere_host.LINDS-ESXi.resource_pool_id
-  linds_centos_9      = data.vsphere_virtual_machine.linds-centos-9.id
-  linds_centos_8      = data.vsphere_virtual_machine.linds-centos-8.id
+  linds_centos_9      = data.vsphere_virtual_machine.jd-centos-9.id
+  linds_centos_8      = data.vsphere_virtual_machine.jd-centos-8.id
   linds_datastore_nas = vsphere_vmfs_datastore.linds-datastore.id
 }
 

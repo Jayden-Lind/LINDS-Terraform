@@ -1,6 +1,6 @@
 resource "vsphere_vmfs_datastore" "jd-datastore" {
   name           = "JD-Datastore-OS"
-  host_system_id = data.vsphere_host.JD-ESXi.id
+  host_system_id = vsphere_host.jd-esxi-01.id
   disks = [
     "naa.600508b1001c10ab7892e1eed682dcca",
   ]

@@ -1,3 +1,16 @@
+data "vsphere_host_thumbprint" "jd-thumbprint" {
+  address = "jd-esxi-01.linds.com.au"
+  insecure = true
+}
+
+resource "vsphere_host" "jd-esxi-01" {
+  hostname = "jd-esxi-01.linds.com.au"
+  username = var.jd-username
+  password = var.jd-password
+  license = "HG00K-03H8K-48929-8K1NP-3LUJ4"
+  thumbprint = data.vsphere_host_thumbprint.jd-thumbprint.id
+}
+
 resource "vsphere_virtual_machine" "JD-Web-01" {
   name                = "JD-Web-01"
   resource_pool_id    = local.jd_host
@@ -19,15 +32,20 @@ resource "vsphere_virtual_machine" "JD-Web-01" {
   }
   lifecycle {
     prevent_destroy = true
+    ignore_changes = [
+      ept_rvi_mode,
+      hv_mode
+    ]
   }
 }
 
 resource "vsphere_virtual_machine" "JD-Plex-01" {
   name                    = "JD-Plex-01"
-  resource_pool_id        = local.jd_host
+  resource_pool_id = local.jd_host
   datastore_id            = vsphere_vmfs_datastore.jd-datastore.id
   firmware                = "efi"
   num_cpus                = 4
+  num_cores_per_socket    = 4
   memory                  = 4096
   guest_id                = "rhel9_64Guest"
   sync_time_with_host     = false
@@ -44,6 +62,10 @@ resource "vsphere_virtual_machine" "JD-Plex-01" {
   }
   lifecycle {
     prevent_destroy = true
+    ignore_changes = [
+      ept_rvi_mode,
+      hv_mode
+    ]
   }
 }
 
@@ -68,6 +90,10 @@ resource "vsphere_virtual_machine" "JD-Dev-02" {
   }
   lifecycle {
     prevent_destroy = true
+    ignore_changes = [
+      ept_rvi_mode,
+      hv_mode
+    ]
   }
 }
 
@@ -76,6 +102,7 @@ resource "vsphere_virtual_machine" "JD-Kube-01" {
   resource_pool_id    = local.jd_host
   datastore_id        = vsphere_vmfs_datastore.jd-datastore.id
   num_cpus            = 2
+  num_cores_per_socket = 2
   memory              = 8192
   firmware            = "efi"
   guest_id            = "centos8_64Guest"
@@ -103,6 +130,10 @@ resource "vsphere_virtual_machine" "JD-Kube-01" {
   }
   lifecycle {
     prevent_destroy = true
+    ignore_changes = [
+      ept_rvi_mode,
+      hv_mode
+    ]
   }
 }
 
@@ -111,6 +142,7 @@ resource "vsphere_virtual_machine" "JD-Kube-02" {
   resource_pool_id    = local.jd_host
   datastore_id        = vsphere_vmfs_datastore.jd-datastore.id
   num_cpus            = 2
+  num_cores_per_socket = 2
   memory              = 4096
   firmware            = "efi"
   sync_time_with_host = false
@@ -138,6 +170,10 @@ resource "vsphere_virtual_machine" "JD-Kube-02" {
   }
   lifecycle {
     prevent_destroy = true
+    ignore_changes = [
+      ept_rvi_mode,
+      hv_mode
+    ]
   }
 }
 
@@ -146,6 +182,7 @@ resource "vsphere_virtual_machine" "JD-Kube-03" {
   resource_pool_id    = local.jd_host
   datastore_id        = vsphere_vmfs_datastore.jd-datastore.id
   num_cpus            = 2
+  num_cores_per_socket = 2
   memory              = 4096
   firmware            = "efi"
   sync_time_with_host = false
@@ -175,40 +212,10 @@ resource "vsphere_virtual_machine" "JD-Kube-03" {
   }
   lifecycle {
     prevent_destroy = true
-  }
-}
-
-resource "vsphere_virtual_machine" "JD-Truenas-01" {
-  name                = "JD-Truenas-01"
-  resource_pool_id    = local.jd_host
-  datastore_id        = vsphere_vmfs_datastore.jd-datastore.id
-  num_cpus            = 4
-  memory              = 16384
-  firmware            = "efi"
-  sync_time_with_host = false
-  network_interface {
-    network_id = data.vsphere_network.jd_network.id
-  }
-  scsi_controller_count = 2
-  scsi_type             = "lsilogic-sas"
-  disk {
-    label            = "disk0"
-    size             = 16
-    thin_provisioned = false
-    keep_on_remove   = true
-    unit_number      = 0
-    datastore_id     = vsphere_vmfs_datastore.jd-datastore.id
-  }
-  disk {
-    label            = "disk1"
-    size             = 100
-    thin_provisioned = false
-    keep_on_remove   = true
-    unit_number      = 15
-    datastore_id     = vsphere_vmfs_datastore.jd-datastore.id
-  }
-  lifecycle {
-    prevent_destroy = true
+    ignore_changes = [
+      ept_rvi_mode,
+      hv_mode
+    ]
   }
 }
 
@@ -235,6 +242,10 @@ resource "vsphere_virtual_machine" "JD-Puppet-Master" {
   }
   lifecycle {
     prevent_destroy = true
+    ignore_changes = [
+      ept_rvi_mode,
+      hv_mode
+    ]
   }
 }
 
@@ -243,6 +254,7 @@ resource "vsphere_virtual_machine" "JD-Backup-01" {
   resource_pool_id    = local.jd_host
   datastore_id        = vsphere_vmfs_datastore.jd-datastore.id
   num_cpus            = 2
+  num_cores_per_socket = 2
   memory              = 2048
   firmware            = "efi"
   sync_time_with_host = false
@@ -261,6 +273,10 @@ resource "vsphere_virtual_machine" "JD-Backup-01" {
   }
   lifecycle {
     prevent_destroy = true
+    ignore_changes = [
+      ept_rvi_mode,
+      hv_mode
+    ]
   }
 }
 
@@ -269,6 +285,7 @@ resource "vsphere_virtual_machine" "JD-OPNsense-01" {
   resource_pool_id    = local.jd_host
   datastore_id        = vsphere_vmfs_datastore.jd-datastore.id
   num_cpus            = 4
+  num_cores_per_socket = 4
   memory              = 4096
   firmware            = "bios"
   sync_time_with_host = false
@@ -276,9 +293,13 @@ resource "vsphere_virtual_machine" "JD-OPNsense-01" {
   memory_reservation  = "4096"
   cpu_reservation     = "7992"
   vvtd_enabled        = false
-  pci_device_id       = ["0000:08:00.1"]
   network_interface {
     network_id = data.vsphere_network.VLAN-Trunk.id
+    use_static_mac = true
+  }
+  network_interface {
+    network_id     = data.vsphere_network.WAN.id
+    mac_address    = "00:0c:29:43:92:7f"
   }
   scsi_controller_count = 1
   scsi_type             = "pvscsi"
@@ -292,6 +313,10 @@ resource "vsphere_virtual_machine" "JD-OPNsense-01" {
   }
   lifecycle {
     prevent_destroy = true
+    ignore_changes = [
+      ept_rvi_mode,
+      hv_mode
+    ]
   }
 }
 
@@ -300,9 +325,11 @@ resource "vsphere_virtual_machine" "JD-Torrent-01" {
   resource_pool_id    = local.jd_host
   datastore_id        = vsphere_vmfs_datastore.jd-datastore.id
   num_cpus            = 4
+  num_cores_per_socket = 4
   memory              = 8192
   firmware            = "efi"
   sync_time_with_host = false
+  guest_id            = "centos8_64Guest"
   network_interface {
     network_id = data.vsphere_network.VLAN-51.id
   }
@@ -316,8 +343,23 @@ resource "vsphere_virtual_machine" "JD-Torrent-01" {
     unit_number      = 0
     datastore_id     = vsphere_vmfs_datastore.jd-datastore.id
   }
+  clone {
+    template_uuid = local.jd_centos_9
+    customize {
+      linux_options {
+        host_name    = "JD-Torrent-01"
+        domain       = "linds.com.au"
+        hw_clock_utc = false
+      }
+      network_interface {}
+    }
+  }
   lifecycle {
     prevent_destroy = true
+    ignore_changes = [
+      ept_rvi_mode,
+      hv_mode
+    ]
   }
 }
 
@@ -347,3 +389,131 @@ resource "vsphere_virtual_machine" "JD-Torrent-01" {
 #     prevent_destroy = true
 #   }
 # }
+
+
+resource "vsphere_virtual_machine" "JD-Ansible-01" {
+  name                = "JD-Ansible-01"
+  resource_pool_id    = local.jd_host
+  datastore_id        = vsphere_vmfs_datastore.jd-datastore.id
+  num_cpus            = 2
+  num_cores_per_socket = 2
+  memory              = 4096
+  firmware            = "efi"
+  sync_time_with_host = false
+  guest_id = "centos8_64Guest"
+  network_interface {
+    network_id = data.vsphere_network.DEV.id
+  }
+  disk {
+    label            = "disk0"
+    size             = 16
+    thin_provisioned = false
+    keep_on_remove   = true
+    datastore_id     = vsphere_vmfs_datastore.jd-datastore.id
+  }
+  clone {
+    template_uuid = local.jd_centos_9
+    customize {
+      linux_options {
+        host_name    = "JD-Ansible-01"
+        domain       = "linds.com.au"
+        hw_clock_utc = false
+      }
+      network_interface {}
+    }
+  }
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes = [
+      ept_rvi_mode,
+      hv_mode
+    ]
+  }
+}
+
+resource "vsphere_virtual_machine" "JD-TRUEnas-01" {
+  name                = "JD-TrueNAS-02"
+  resource_pool_id    = local.jd_host
+  datastore_id        = vsphere_vmfs_datastore.jd-datastore.id
+  num_cpus            = 8
+  num_cores_per_socket = 8
+  memory              = 16384
+  firmware            = "efi"
+  sync_time_with_host = false
+  guest_id            = "centos8_64Guest"
+
+  scsi_controller_count = 2
+
+  network_interface {
+    network_id = data.vsphere_network.DEV.id
+    use_static_mac = true
+  }
+  disk {
+    label            = "disk0"
+    size             = 16
+    thin_provisioned = false
+    keep_on_remove   = true
+    datastore_id     = vsphere_vmfs_datastore.jd-datastore.id
+  }
+
+  disk {
+    label            = "disk1"
+    size             = 100
+    thin_provisioned = false
+    keep_on_remove   = true
+    datastore_id     = vsphere_vmfs_datastore.jd-datastore.id
+    unit_number      = 15
+  }
+
+  cdrom {
+    datastore_id = vsphere_vmfs_datastore.jd-datastore.id
+    path         = "TrueNAS-SCALE-22.12.3.2.iso"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes = [
+      ept_rvi_mode,
+      hv_mode
+    ]
+  }
+
+}
+
+
+resource "vsphere_virtual_machine" "JD-MineOS-01" {
+  name                = "JD-MineOS-01"
+  resource_pool_id    = local.jd_host
+  datastore_id        = vsphere_vmfs_datastore.jd-datastore.id
+  num_cpus            = 8
+  num_cores_per_socket = 8
+  memory              = 32784
+  firmware            = "bios"
+  sync_time_with_host = false
+  guest_id            = "centos8_64Guest"
+
+  network_interface {
+    network_id = data.vsphere_network.DEV.id
+  }
+  disk {
+    label            = "disk0"
+    size             = 50
+    thin_provisioned = false
+    keep_on_remove   = true
+    datastore_id     = vsphere_vmfs_datastore.jd-datastore.id
+  }
+
+  cdrom {
+    datastore_id = vsphere_vmfs_datastore.jd-datastore.id
+    path         = "/ISO/mineos-node_bullseye-x64.iso"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes = [
+      ept_rvi_mode,
+      hv_mode
+    ]
+  }
+
+}
