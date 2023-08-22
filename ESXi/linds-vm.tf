@@ -16,7 +16,7 @@ resource "vsphere_virtual_machine" "LINDS-Kube-02" {
     network_id = data.vsphere_network.LINDS-SERVER.id
   }
   clone {
-    template_uuid = local.linds_centos_9
+    template_uuid = local.jd_centos_9
     customize {
       linux_options {
         host_name    = "LINDS-Kube-02"
@@ -26,21 +26,28 @@ resource "vsphere_virtual_machine" "LINDS-Kube-02" {
       network_interface {}
     }
   }
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes = [
+      ept_rvi_mode,
+      hv_mode
+    ]
+  }
 }
 
 resource "vsphere_virtual_machine" "LINDS-BACKUP" {
   name                 = "LINDS-BACKUP"
   resource_pool_id     = local.linds_host
   datastore_id         = vsphere_vmfs_datastore.linds-datastore.id
-  num_cpus             = 6
-  num_cores_per_socket = 3
-  memory               = 6144
-  memory_reservation   = 6144
+  num_cpus             = 8
+  num_cores_per_socket = 2
+  memory               = 12288
+  memory_reservation   = 12288
   firmware             = "efi"
   sync_time_with_host  = false
   tools_upgrade_policy = "upgradeAtPowerCycle"
   network_interface {
-    network_id = data.vsphere_network.VLAN-100.id
+    network_id = data.vsphere_network.VLAN-TRUNK.id
   }
   scsi_controller_count = 2
   scsi_type             = "pvscsi"
@@ -62,6 +69,10 @@ resource "vsphere_virtual_machine" "LINDS-BACKUP" {
   }
   lifecycle {
     prevent_destroy = true
+    ignore_changes = [
+      ept_rvi_mode,
+      hv_mode
+    ]
   }
 }
 
@@ -100,6 +111,10 @@ resource "vsphere_virtual_machine" "LINDS-DC" {
   }
   lifecycle {
     prevent_destroy = true
+    ignore_changes = [
+      ept_rvi_mode,
+      hv_mode
+    ]
   }
 }
 
@@ -131,6 +146,10 @@ resource "vsphere_virtual_machine" "LINDS-DC2" {
   }
   lifecycle {
     prevent_destroy = true
+    ignore_changes = [
+      ept_rvi_mode,
+      hv_mode
+    ]
   }
 }
 
@@ -144,7 +163,7 @@ resource "vsphere_virtual_machine" "LINDS-Kube-01" {
   sync_time_with_host = false
   guest_id = "centos8_64Guest"
   clone {
-    template_uuid = local.linds_centos_9
+    template_uuid = local.jd_centos_9
     customize {
       linux_options {
         host_name    = "LINDS-Kube-01"
@@ -166,6 +185,10 @@ resource "vsphere_virtual_machine" "LINDS-Kube-01" {
   }
   lifecycle {
     prevent_destroy = true
+    ignore_changes = [
+      ept_rvi_mode,
+      hv_mode
+    ]
   }
 }
 
@@ -190,6 +213,10 @@ resource "vsphere_virtual_machine" "LINDS-Plex-01" {
   }
   lifecycle {
     prevent_destroy = true
+    ignore_changes = [
+      ept_rvi_mode,
+      hv_mode
+    ]
   }
 }
 
@@ -232,6 +259,10 @@ resource "vsphere_virtual_machine" "LINDS-Truenas-01" {
   }
   lifecycle {
     prevent_destroy = true
+    ignore_changes = [
+      ept_rvi_mode,
+      hv_mode
+    ]
   }
 }
 
@@ -256,6 +287,10 @@ resource "vsphere_virtual_machine" "LINDS-Torrent" {
   }
   lifecycle {
     prevent_destroy = true
+    ignore_changes = [
+      ept_rvi_mode,
+      hv_mode
+    ]
   }
 }
 
@@ -293,5 +328,9 @@ resource "vsphere_virtual_machine" "LINDS-OPNsense-01" {
   }
   lifecycle {
     prevent_destroy = true
+    ignore_changes = [
+      ept_rvi_mode,
+      hv_mode
+    ]
   }
 }

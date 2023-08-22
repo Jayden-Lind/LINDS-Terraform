@@ -3,3 +3,6 @@
 vars.auto.pkrvars.hcl
 terraform.tfvars
 terraform.tfstate*
+.terraform*
+*.cer
+*.key
