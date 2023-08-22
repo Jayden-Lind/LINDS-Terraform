@@ -26,6 +26,13 @@ resource "vsphere_virtual_machine" "LINDS-Kube-02" {
       network_interface {}
     }
   }
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes = [
+      ept_rvi_mode,
+      hv_mode
+    ]
+  }
 }
 
 resource "vsphere_virtual_machine" "LINDS-BACKUP" {
@@ -40,7 +47,7 @@ resource "vsphere_virtual_machine" "LINDS-BACKUP" {
   sync_time_with_host  = false
   tools_upgrade_policy = "upgradeAtPowerCycle"
   network_interface {
-    network_id = data.vsphere_network.VLAN-100.id
+    network_id = data.vsphere_network.VLAN-TRUNK.id
   }
   scsi_controller_count = 2
   scsi_type             = "pvscsi"

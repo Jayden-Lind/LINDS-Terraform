@@ -32,6 +32,7 @@ resource "vsphere_host_virtual_switch" "linds-switch" {
   allow_forged_transmits = true
   allow_mac_changes      = true
   allow_promiscuous      = true
+  link_discovery_operation = "both"
 }
 
 resource "vsphere_vnic" "jd-vnic" {
@@ -63,9 +64,9 @@ resource "vsphere_vnic" "linds-vnic" {
   host      = data.vsphere_host.LINDS-ESXi.id
   portgroup = vsphere_host_port_group.LINDS_MANAGEMENT.name
   ipv4 {
-    ip      = "10.0.0.6"
+    ip      = "192.168.6.205"
     netmask = "255.255.255.0"
-    gw      = "10.0.0.1"
+    gw      = "192.168.6.1"
   }
   services = [ "management", "vmotion" ]
   netstack = "defaultTcpipStack"

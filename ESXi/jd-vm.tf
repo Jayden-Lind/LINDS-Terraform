@@ -280,46 +280,6 @@ resource "vsphere_virtual_machine" "JD-Backup-01" {
   }
 }
 
-resource "vsphere_virtual_machine" "JD-OPNsense-01" {
-  name                = "JD-OPNsense-01"
-  resource_pool_id    = local.jd_host
-  datastore_id        = vsphere_vmfs_datastore.jd-datastore.id
-  num_cpus            = 4
-  num_cores_per_socket = 4
-  memory              = 4096
-  firmware            = "bios"
-  sync_time_with_host = false
-  latency_sensitivity = "high"
-  memory_reservation  = "4096"
-  cpu_reservation     = "7992"
-  vvtd_enabled        = false
-  network_interface {
-    network_id = data.vsphere_network.VLAN-Trunk.id
-    use_static_mac = true
-  }
-  network_interface {
-    network_id     = data.vsphere_network.WAN.id
-    mac_address    = "00:0c:29:43:92:7f"
-  }
-  scsi_controller_count = 1
-  scsi_type             = "pvscsi"
-  disk {
-    label            = "disk0"
-    size             = 16
-    thin_provisioned = false
-    keep_on_remove   = true
-    unit_number      = 0
-    datastore_id     = vsphere_vmfs_datastore.jd-datastore.id
-  }
-  lifecycle {
-    prevent_destroy = true
-    ignore_changes = [
-      ept_rvi_mode,
-      hv_mode
-    ]
-  }
-}
-
 resource "vsphere_virtual_machine" "JD-Torrent-01" {
   name                = "JD-Torrent-01"
   resource_pool_id    = local.jd_host
@@ -390,7 +350,6 @@ resource "vsphere_virtual_machine" "JD-Torrent-01" {
 #   }
 # }
 
-
 resource "vsphere_virtual_machine" "JD-Ansible-01" {
   name                = "JD-Ansible-01"
   resource_pool_id    = local.jd_host
@@ -402,7 +361,7 @@ resource "vsphere_virtual_machine" "JD-Ansible-01" {
   sync_time_with_host = false
   guest_id = "centos8_64Guest"
   network_interface {
-    network_id = data.vsphere_network.DEV.id
+    network_id = data.vsphere_network.jd_network.id
   }
   disk {
     label            = "disk0"
@@ -516,4 +475,45 @@ resource "vsphere_virtual_machine" "JD-MineOS-01" {
     ]
   }
 
+}
+
+
+resource "vsphere_virtual_machine" "JD-Minecraft-01" {
+  name                = "JD-Minecraft-01"
+  resource_pool_id    = local.jd_host
+  datastore_id        = vsphere_vmfs_datastore.jd-datastore.id
+  num_cpus            = 4
+  num_cores_per_socket = 4
+  memory              = 16384
+  firmware            = "efi"
+  sync_time_with_host = false
+  guest_id = "centos8_64Guest"
+  network_interface {
+    network_id = data.vsphere_network.DEV.id
+  }
+  disk {
+    label            = "disk0"
+    size             = 50
+    thin_provisioned = false
+    keep_on_remove   = true
+    datastore_id     = vsphere_vmfs_datastore.jd-datastore.id
+  }
+  clone {
+    template_uuid = local.jd_centos_9
+    customize {
+      linux_options {
+        host_name    = "JD-minecraft-01"
+        domain       = "linds.com.au"
+        hw_clock_utc = false
+      }
+      network_interface {}
+    }
+  }
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes = [
+      ept_rvi_mode,
+      hv_mode
+    ]
+  }
 }
