@@ -439,52 +439,13 @@ resource "vsphere_virtual_machine" "JD-TRUEnas-01" {
 
 }
 
-
-resource "vsphere_virtual_machine" "JD-MineOS-01" {
-  name                = "JD-MineOS-01"
-  resource_pool_id    = local.jd_host
-  datastore_id        = vsphere_vmfs_datastore.jd-datastore.id
-  num_cpus            = 8
-  num_cores_per_socket = 8
-  memory              = 32784
-  firmware            = "bios"
-  sync_time_with_host = false
-  guest_id            = "centos8_64Guest"
-
-  network_interface {
-    network_id = data.vsphere_network.DEV.id
-  }
-  disk {
-    label            = "disk0"
-    size             = 50
-    thin_provisioned = false
-    keep_on_remove   = true
-    datastore_id     = vsphere_vmfs_datastore.jd-datastore.id
-  }
-
-  cdrom {
-    datastore_id = vsphere_vmfs_datastore.jd-datastore.id
-    path         = "/ISO/mineos-node_bullseye-x64.iso"
-  }
-
-  lifecycle {
-    prevent_destroy = true
-    ignore_changes = [
-      ept_rvi_mode,
-      hv_mode
-    ]
-  }
-
-}
-
-
 resource "vsphere_virtual_machine" "JD-Minecraft-01" {
   name                = "JD-Minecraft-01"
   resource_pool_id    = local.jd_host
   datastore_id        = vsphere_vmfs_datastore.jd-datastore.id
-  num_cpus            = 4
+  num_cpus            = 8
   num_cores_per_socket = 4
-  memory              = 16384
+  memory              = 32768
   firmware            = "efi"
   sync_time_with_host = false
   guest_id = "centos8_64Guest"
