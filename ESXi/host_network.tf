@@ -10,28 +10,15 @@ resource "vsphere_host_virtual_switch" "jd-switch" {
   mtu                    = 1500
 }
 
-resource "vsphere_host_virtual_switch" "jd-switch-wan" {
-  name                   = "WAN"
-  host_system_id         = vsphere_host.jd-esxi-01.id
-  network_adapters       = ["vmnic9"]
-  active_nics            = ["vmnic9"]
-  standby_nics           = []
-  allow_forged_transmits = true
-  allow_mac_changes      = true
-  allow_promiscuous      = true
-  mtu                    = 1500
-  number_of_ports        = 1024
-}
-
 resource "vsphere_host_virtual_switch" "linds-switch" {
-  name                   = "vSwitch0"
-  host_system_id         = data.vsphere_host.LINDS-ESXi.id
-  network_adapters       = ["vmnic1"]
-  active_nics            = ["vmnic1"]
-  standby_nics           = []
-  allow_forged_transmits = true
-  allow_mac_changes      = true
-  allow_promiscuous      = true
+  name                     = "vSwitch0"
+  host_system_id           = data.vsphere_host.LINDS-ESXi.id
+  network_adapters         = ["vmnic1"]
+  active_nics              = ["vmnic1"]
+  standby_nics             = []
+  allow_forged_transmits   = true
+  allow_mac_changes        = true
+  allow_promiscuous        = true
   link_discovery_operation = "both"
 }
 
@@ -43,7 +30,7 @@ resource "vsphere_vnic" "jd-vnic" {
     netmask = "255.255.255.0"
     gw      = "10.0.50.1"
   }
-  services = [ "management", "vmotion" ]
+  services = ["management", "vmotion"]
   netstack = "defaultTcpipStack"
 }
 
@@ -68,7 +55,7 @@ resource "vsphere_vnic" "linds-vnic" {
     netmask = "255.255.255.0"
     gw      = "192.168.6.1"
   }
-  services = [ "management", "vmotion" ]
+  services = ["management", "vmotion"]
   netstack = "defaultTcpipStack"
 }
 

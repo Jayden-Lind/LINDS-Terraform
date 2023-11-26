@@ -1,13 +1,13 @@
 data "vsphere_host_thumbprint" "jd-thumbprint" {
-  address = "jd-esxi-01.linds.com.au"
+  address  = "jd-esxi-01.linds.com.au"
   insecure = true
 }
 
 resource "vsphere_host" "jd-esxi-01" {
-  hostname = "jd-esxi-01.linds.com.au"
-  username = var.jd-username
-  password = var.jd-password
-  license = "HG00K-03H8K-48929-8K1NP-3LUJ4"
+  hostname   = "jd-esxi-01.linds.com.au"
+  username   = var.jd-username
+  password   = var.jd-password
+  license    = "HG00K-03H8K-48929-8K1NP-3LUJ4"
   thumbprint = data.vsphere_host_thumbprint.jd-thumbprint.id
 }
 
@@ -41,7 +41,7 @@ resource "vsphere_virtual_machine" "JD-Web-01" {
 
 resource "vsphere_virtual_machine" "JD-Plex-01" {
   name                    = "JD-Plex-01"
-  resource_pool_id = local.jd_host
+  resource_pool_id        = local.jd_host
   datastore_id            = vsphere_vmfs_datastore.jd-datastore.id
   firmware                = "efi"
   num_cpus                = 4
@@ -98,15 +98,15 @@ resource "vsphere_virtual_machine" "JD-Dev-02" {
 }
 
 resource "vsphere_virtual_machine" "JD-Kube-01" {
-  name                = "JD-Kube-01"
-  resource_pool_id    = local.jd_host
-  datastore_id        = vsphere_vmfs_datastore.jd-datastore.id
-  num_cpus            = 2
+  name                 = "JD-Kube-01"
+  resource_pool_id     = local.jd_host
+  datastore_id         = vsphere_vmfs_datastore.jd-datastore.id
+  num_cpus             = 2
   num_cores_per_socket = 2
-  memory              = 8192
-  firmware            = "efi"
-  guest_id            = "centos8_64Guest"
-  sync_time_with_host = false
+  memory               = 8192
+  firmware             = "efi"
+  guest_id             = "centos8_64Guest"
+  sync_time_with_host  = false
   clone {
     template_uuid = local.jd_centos_9
     customize {
@@ -138,15 +138,15 @@ resource "vsphere_virtual_machine" "JD-Kube-01" {
 }
 
 resource "vsphere_virtual_machine" "JD-Kube-02" {
-  name                = "JD-Kube-02"
-  resource_pool_id    = local.jd_host
-  datastore_id        = vsphere_vmfs_datastore.jd-datastore.id
-  num_cpus            = 2
-  num_cores_per_socket = 2
-  memory              = 4096
-  firmware            = "efi"
-  sync_time_with_host = false
-  guest_id            = "centos8_64Guest"
+  name                 = "JD-Kube-02"
+  resource_pool_id     = local.jd_host
+  datastore_id         = vsphere_vmfs_datastore.jd-datastore.id
+  num_cpus             = 4 
+  num_cores_per_socket = 4
+  memory               = 8192
+  firmware             = "efi"
+  sync_time_with_host  = false
+  guest_id             = "centos8_64Guest"
   network_interface {
     network_id = data.vsphere_network.DEV.id
   }
@@ -178,18 +178,18 @@ resource "vsphere_virtual_machine" "JD-Kube-02" {
 }
 
 resource "vsphere_virtual_machine" "JD-Kube-03" {
-  name                = "JD-Kube-03"
-  resource_pool_id    = local.jd_host
-  datastore_id        = vsphere_vmfs_datastore.jd-datastore.id
-  num_cpus            = 2
-  num_cores_per_socket = 2
-  memory              = 4096
-  firmware            = "efi"
-  sync_time_with_host = false
-  guest_id = "centos8_64Guest"
+  name                 = "JD-Kube-03"
+  resource_pool_id     = local.jd_host
+  datastore_id         = vsphere_vmfs_datastore.jd-datastore.id
+  num_cpus             = 4 
+  num_cores_per_socket = 4
+  memory               = 8192
+  firmware             = "efi"
+  sync_time_with_host  = false
+  guest_id             = "centos8_64Guest"
   network_interface {
-    network_id = data.vsphere_network.DEV.id
-    mac_address = "00:50:56:ae:87:fd"
+    network_id     = data.vsphere_network.DEV.id
+    mac_address    = "00:50:56:ae:87:fd"
     use_static_mac = true
   }
   disk {
@@ -250,14 +250,14 @@ resource "vsphere_virtual_machine" "JD-Puppet-Master" {
 }
 
 resource "vsphere_virtual_machine" "JD-Backup-01" {
-  name                = "JD-Backup-01"
-  resource_pool_id    = local.jd_host
-  datastore_id        = vsphere_vmfs_datastore.jd-datastore.id
-  num_cpus            = 2
+  name                 = "JD-Backup-01"
+  resource_pool_id     = local.jd_host
+  datastore_id         = vsphere_vmfs_datastore.jd-datastore.id
+  num_cpus             = 2
   num_cores_per_socket = 2
-  memory              = 2048
-  firmware            = "efi"
-  sync_time_with_host = false
+  memory               = 2048
+  firmware             = "efi"
+  sync_time_with_host  = false
   network_interface {
     network_id = data.vsphere_network.jd_network.id
   }
@@ -281,15 +281,15 @@ resource "vsphere_virtual_machine" "JD-Backup-01" {
 }
 
 resource "vsphere_virtual_machine" "JD-Torrent-01" {
-  name                = "JD-Torrent-01"
-  resource_pool_id    = local.jd_host
-  datastore_id        = vsphere_vmfs_datastore.jd-datastore.id
-  num_cpus            = 4
+  name                 = "JD-Torrent-01"
+  resource_pool_id     = local.jd_host
+  datastore_id         = vsphere_vmfs_datastore.jd-datastore.id
+  num_cpus             = 4
   num_cores_per_socket = 4
-  memory              = 8192
-  firmware            = "efi"
-  sync_time_with_host = false
-  guest_id            = "centos8_64Guest"
+  memory               = 8192
+  firmware             = "efi"
+  sync_time_with_host  = false
+  guest_id             = "centos8_64Guest"
   network_interface {
     network_id = data.vsphere_network.VLAN-51.id
   }
@@ -351,15 +351,15 @@ resource "vsphere_virtual_machine" "JD-Torrent-01" {
 # }
 
 resource "vsphere_virtual_machine" "JD-Ansible-01" {
-  name                = "JD-Ansible-01"
-  resource_pool_id    = local.jd_host
-  datastore_id        = vsphere_vmfs_datastore.jd-datastore.id
-  num_cpus            = 2
+  name                 = "JD-Ansible-01"
+  resource_pool_id     = local.jd_host
+  datastore_id         = vsphere_vmfs_datastore.jd-datastore.id
+  num_cpus             = 2
   num_cores_per_socket = 2
-  memory              = 4096
-  firmware            = "efi"
-  sync_time_with_host = false
-  guest_id = "centos8_64Guest"
+  memory               = 4096
+  firmware             = "efi"
+  sync_time_with_host  = false
+  guest_id             = "centos8_64Guest"
   network_interface {
     network_id = data.vsphere_network.jd_network.id
   }
@@ -391,20 +391,20 @@ resource "vsphere_virtual_machine" "JD-Ansible-01" {
 }
 
 resource "vsphere_virtual_machine" "JD-TRUEnas-01" {
-  name                = "JD-TrueNAS-02"
-  resource_pool_id    = local.jd_host
-  datastore_id        = vsphere_vmfs_datastore.jd-datastore.id
-  num_cpus            = 8
+  name                 = "JD-TrueNAS-02"
+  resource_pool_id     = local.jd_host
+  datastore_id         = vsphere_vmfs_datastore.jd-datastore.id
+  num_cpus             = 8
   num_cores_per_socket = 8
-  memory              = 16384
-  firmware            = "efi"
-  sync_time_with_host = false
-  guest_id            = "centos8_64Guest"
+  memory               = 16384
+  firmware             = "efi"
+  sync_time_with_host  = false
+  guest_id             = "centos8_64Guest"
 
   scsi_controller_count = 2
 
   network_interface {
-    network_id = data.vsphere_network.DEV.id
+    network_id     = data.vsphere_network.DEV.id
     use_static_mac = true
   }
   disk {
@@ -440,15 +440,15 @@ resource "vsphere_virtual_machine" "JD-TRUEnas-01" {
 }
 
 resource "vsphere_virtual_machine" "JD-Minecraft-01" {
-  name                = "JD-Minecraft-01"
-  resource_pool_id    = local.jd_host
-  datastore_id        = vsphere_vmfs_datastore.jd-datastore.id
-  num_cpus            = 8
+  name                 = "JD-Minecraft-01"
+  resource_pool_id     = local.jd_host
+  datastore_id         = vsphere_vmfs_datastore.jd-datastore.id
+  num_cpus             = 8
   num_cores_per_socket = 4
-  memory              = 32768
-  firmware            = "efi"
-  sync_time_with_host = false
-  guest_id = "centos8_64Guest"
+  memory               = 32768
+  firmware             = "efi"
+  sync_time_with_host  = false
+  guest_id             = "centos8_64Guest"
   network_interface {
     network_id = data.vsphere_network.DEV.id
   }

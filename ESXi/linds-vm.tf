@@ -5,7 +5,7 @@ resource "vsphere_virtual_machine" "LINDS-Kube-02" {
   num_cpus         = 2
   memory           = 4096
   guest_id         = "centos8_64Guest"
-  firmware            = "efi"
+  firmware         = "efi"
   disk {
     label            = "disk0"
     thin_provisioned = true
@@ -161,7 +161,7 @@ resource "vsphere_virtual_machine" "LINDS-Kube-01" {
   memory              = 4096
   firmware            = "efi"
   sync_time_with_host = false
-  guest_id = "centos8_64Guest"
+  guest_id            = "centos8_64Guest"
   clone {
     template_uuid = local.jd_centos_9
     customize {

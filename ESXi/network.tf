@@ -47,15 +47,6 @@ resource "vsphere_host_port_group" "VLAN_JD_SERVER" {
   vlan_id             = 55
 }
 
-resource "vsphere_host_port_group" "WAN" {
-  name                = "WAN"
-  host_system_id      = vsphere_host.jd-esxi-01.id
-  virtual_switch_name = vsphere_host_virtual_switch.jd-switch-wan.name
-  allow_forged_transmits = true
-  allow_mac_changes = true
-  allow_promiscuous = true
-}
-
 resource "vsphere_host_port_group" "VLAN_LINDS_CLIENT" {
   name                = "VLAN 100"
   host_system_id      = data.vsphere_host.LINDS-ESXi.id
@@ -82,12 +73,6 @@ resource "vsphere_host_port_group" "VLAN_LINDS_TRUNK" {
   host_system_id      = data.vsphere_host.LINDS-ESXi.id
   virtual_switch_name = vsphere_host_virtual_switch.linds-switch.name
   vlan_id             = 4095
-}
-
-
-data "vsphere_network" "WAN" {
-  name          = vsphere_host_port_group.WAN.name
-  datacenter_id = data.vsphere_datacenter.dc.id
 }
 
 data "vsphere_network" "jd_network" {
