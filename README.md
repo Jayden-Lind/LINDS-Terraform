@@ -6,17 +6,18 @@
 
 Uses [vSphere terraform provider](https://registry.terraform.io/providers/hashicorp/vsphere/2.2.0) to provision VM's, Host Port Groups, Datastore.
 
-[Packer](https://www.packer.io/) to create the VM template of CentOS images, which is then cloned per ESXi host.
+For Proxmox I use [bpg/proxmox](https://registry.terraform.io/providers/bpg/proxmox/latest)
 
+[Packer](https://www.packer.io/) to create the VM template of CentOS images, which is then cloned per ESXi host and Proxmox host.
 
-### Building the images
+## Packer
 
-Packer is creating a [CentOS 9 Stream](https://centos.org/stream9/) and [CentOS 8 Stream](http://isoredirect.centos.org/centos/8-stream/isos/x86_64/) image, that installs and enables Puppet, then making the CentOS Stream a template on the local ESXi host. On boot up of cloning the template VM will automatically register with Puppet and start provisioning based on [LINDS-Puppet](https://github.com/Jayden-Lind/LINDS-Puppet).
+### Vsphere
 
 1. Change to packer directory
 
 ```shell
-$ git clone https://github.com/Jayden-Lind/LINDS-Terraform.git
+$ cd packer/
 ```
 
 2. Fill in `packer/vars.auto.pkrvars.hcl.example` and rename it to `packer/vars.auto.pkrvars.hcl`.
@@ -54,7 +55,22 @@ $ packer build -var-file=vars.auto.pkrvars.hcl -only=vsphere-iso.centos8 -force 
 $ packer build -var-file=vars.auto.pkrvars.hcl -only=vsphere-iso.centos9 -force .
 ```
 
-### Terraform
+### Proxmox
+
+
+**To build CentOS 9 on proxmox**
+
+1. Copy and rename variables-proxmox.pkrvars.hcl.example to variables-proxmox.pkrvars.hcl and fill in variables
+
+2. Run the below command
+```shell
+cd packer && packer build -var-file variables-proxmox.pkrvars.hcl proxmox.pkr.hcl
+```
+
+
+## Terraform
+
+### vSphere
 
 1. Copy and rename [terraform.tfvars.example](/terraform.tfvars.example)
 
@@ -85,6 +101,25 @@ $ terraform plan
 
 $ terraform apply
 ```
-## State
+#### State
 
 State is kept on TrueNAS NFS share, that is then rsync'd to secondary TrueNAS offsite. This can be seen in [versions.tf](/versions.tf).
+
+### Proxmox
+
+1. Switch to proxmox directory
+
+`cd proxmox/`
+
+2. Copy and rename [terraform.tfvars.example](/proxmox/terraform.tfvars.example)
+
+
+3. Initialise Terraform and apply configuration
+
+```shell
+$ terraform init
+
+$ terraform plan
+
+$ terraform apply
+```
