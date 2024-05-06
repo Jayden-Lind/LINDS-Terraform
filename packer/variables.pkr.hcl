@@ -33,7 +33,3 @@ variable "network_name" {
   default = ""
 }
 
-variable "ssh_password" {
-  type    = string
-  default = ""
-}

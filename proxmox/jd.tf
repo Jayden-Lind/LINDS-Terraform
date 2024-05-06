@@ -9,12 +9,12 @@ variable "kubernetes" {
     {
       name  = "jd-kube-01"
       cores = "4"
-      ram   = 4096
+      ram   = 8192
     },
     {
       name  = "jd-kube-02"
       cores = "4"
-      ram   = 4096
+      ram   = 16384
     },
     {
       name  = "jd-kube-03"
@@ -44,6 +44,20 @@ resource "proxmox_virtual_environment_vm" "kubernetes_nodes" {
   cpu {
     type  = "host"
     cores = var.kubernetes[count.index].cores
+    flags = [
+      "-md-clear",
+      "-pcid",
+      "-spec-ctrl",
+      "-ssbd",
+      "-ibpb",
+      "-virt-ssbd",
+      "-amd-ssbd",
+      "-amd-no-ssb",
+      "-pdpe1gb",
+      "-hv-tlbflush",
+      "-hv-evmcs",
+      "+aes",
+    ]
   }
   memory {
     dedicated = var.kubernetes[count.index].ram
@@ -84,6 +98,147 @@ resource "proxmox_virtual_environment_vm" "kubernetes_nodes" {
     bridge  = "vmbr0"
     model   = "virtio"
     vlan_id = "53"
+  }
+
+  operating_system {
+    type = "l26"
+  }
+}
+
+resource "proxmox_virtual_environment_vm" "jd-plex-01" {
+  name       = "JD-Plex-01"
+  tags       = ["plex"]
+  node_name  = var.hostname
+  agent {
+    enabled = true
+  }
+  cpu {
+    type  = "host"
+    cores = "4"
+    flags = [
+      "-md-clear",
+      "-pcid",
+      "-spec-ctrl",
+      "-ssbd",
+      "-ibpb",
+      "-virt-ssbd",
+      "-amd-ssbd",
+      "-amd-no-ssb",
+      "-pdpe1gb",
+      "-hv-tlbflush",
+      "-hv-evmcs",
+      "+aes",
+    ]
+  }
+  memory {
+    dedicated = "4096"
+  }
+
+  bios = "ovmf"
+
+  startup {
+    order      = "6"
+    up_delay   = "60"
+    down_delay = "60"
+  }
+
+  disk {
+    datastore_id = var.datastore
+    interface    = "scsi0"
+    size         = "16"
+    iothread     = true
+    discard      = "ignore"
+  }
+
+  machine = "q35"
+
+  clone {
+    vm_id = 109
+  }
+
+  initialization {
+    ip_config {
+      ipv4 {
+        address = "dhcp"
+      }
+    }
+    #    user_data_file_id = proxmox_virtual_environment_file.kube_cloud_config.id
+  }
+
+  network_device {
+    bridge  = "vmbr0"
+    model   = "virtio"
+
+  }
+
+  operating_system {
+    type = "l26"
+  }
+}
+
+resource "proxmox_virtual_environment_vm" "jd-torrent-01" {
+  name       = "JD-Torrent-01"
+  tags       = ["torrent"]
+  node_name  = var.hostname
+  agent {
+    enabled = true
+  }
+  cpu {
+    type  = "host"
+    cores = "8"
+    flags = [
+      "-md-clear",
+      "-pcid",
+      "-spec-ctrl",
+      "-ssbd",
+      "-ibpb",
+      "-virt-ssbd",
+      "-amd-ssbd",
+      "-amd-no-ssb",
+      "-pdpe1gb",
+      "-hv-tlbflush",
+      "-hv-evmcs",
+      "+aes",
+    ]
+  }
+  memory {
+    dedicated = "16384"
+  }
+
+  bios = "ovmf"
+
+  startup {
+    order      = "6"
+    up_delay   = "60"
+    down_delay = "60"
+  }
+
+  disk {
+    datastore_id = var.datastore
+    interface    = "scsi0"
+    size         = "16"
+    iothread     = true
+    discard      = "ignore"
+  }
+
+  machine = "q35"
+
+  clone {
+    vm_id = 109
+  }
+
+  initialization {
+    ip_config {
+      ipv4 {
+        address = "dhcp"
+      }
+    }
+  }
+
+  network_device {
+    bridge  = "vmbr0"
+    model   = "virtio"
+    vlan_id = "51"
   }
 
   operating_system {

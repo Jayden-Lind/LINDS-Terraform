@@ -1,16 +1,7 @@
-packer {
-  required_plugins {
-    name = {
-      version = "~> 1"
-      source  = "github.com/hashicorp/proxmox"
-    }
-  }
-}
-
 source "proxmox-iso" "centos-9" {
   proxmox_url              = var.proxmox_url
   vm_name                  = "packer-centos-9"
-  iso_file                 = "local:iso/CentOS-Stream-9-latest-x86_64-dvd1__1_.iso"
+  iso_file                 = "local:iso/CentOS-Stream-9.iso"
   iso_checksum             = "none"
   username                 = var.proxmox_username
   password                 = var.proxmox_password
@@ -50,11 +41,55 @@ source "proxmox-iso" "centos-9" {
   network_adapters {
     bridge   = "vmbr0"
     model    = "virtio"
-    firewall = true
-    # vlan_tag = 1
+    firewall = false
   }
 }
 
 build {
   sources = ["source.proxmox-iso.centos-9"]
+}
+
+variable "ssh_password" {
+  type    = string
+  default = ""
+}
+
+variable "ssh_username" {
+  type    = string
+  default = ""
+}
+
+variable "proxmox_node" {
+  type    = string
+  default = ""
+}
+
+variable "proxmox_url" {
+  type    = string
+  default = ""
+}
+
+variable "proxmox_storage_pool" {
+  type    = string
+  default = ""
+}
+
+variable "proxmox_password" {
+  type    = string
+  default = ""
+}
+
+variable "proxmox_username" {
+  type    = string
+  default = ""
+}
+
+variable "proxmox_storage_format" {
+  type    = string
+  default = ""
+}
+
+variable "proxmox_storage_pool_type" {
+  type    = string
+  default = ""
 }
