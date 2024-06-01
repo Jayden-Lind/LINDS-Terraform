@@ -7,3 +7,5 @@ terraform.tfstate*
 *.cer
 *.key
 variables-proxmox.pkrvars.hcl
+proxmox_*_terraform.tfvars
+packer_*.pkrvars.hcl
