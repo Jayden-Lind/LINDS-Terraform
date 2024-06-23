@@ -81,6 +81,8 @@ resource "proxmox_virtual_environment_vm" "kubernetes_nodes" {
 
   machine = "q35"
 
+  scsi_hardware = "virtio-scsi-single"
+
   clone {
     vm_id = 109
   }
@@ -102,6 +104,11 @@ resource "proxmox_virtual_environment_vm" "kubernetes_nodes" {
 
   operating_system {
     type = "l26"
+  }
+  lifecycle {
+    ignore_changes = [
+      clone
+    ]
   }
 }
 
@@ -136,6 +143,8 @@ resource "proxmox_virtual_environment_vm" "jd-plex-01" {
 
   bios = "ovmf"
 
+  scsi_hardware = "virtio-scsi-single"
+
   startup {
     order      = "6"
     up_delay   = "60"
@@ -162,7 +171,7 @@ resource "proxmox_virtual_environment_vm" "jd-plex-01" {
         address = "dhcp"
       }
     }
-    #    user_data_file_id = proxmox_virtual_environment_file.kube_cloud_config.id
+
   }
 
   network_device {
@@ -173,6 +182,88 @@ resource "proxmox_virtual_environment_vm" "jd-plex-01" {
 
   operating_system {
     type = "l26"
+  }
+  lifecycle {
+    ignore_changes = [
+      clone
+    ]
+  }
+}
+
+resource "proxmox_virtual_environment_vm" "jd-kube-04" {
+  name       = "jd-kube-04"
+  tags       = ["kubernetes"]
+  node_name  = var.hostname
+  agent {
+    enabled = true
+  }
+  cpu {
+    type  = "host"
+    cores = "4"
+    flags = [
+      "-md-clear",
+      "-pcid",
+      "-spec-ctrl",
+      "-ssbd",
+      "-ibpb",
+      "-virt-ssbd",
+      "-amd-ssbd",
+      "-amd-no-ssb",
+      "-pdpe1gb",
+      "-hv-tlbflush",
+      "-hv-evmcs",
+      "+aes",
+    ]
+  }
+  memory {
+    dedicated = "4096"
+  }
+
+  bios = "ovmf"
+
+  scsi_hardware = "virtio-scsi-single"
+
+  startup {
+    order      = "6"
+    up_delay   = "60"
+    down_delay = "60"
+  }
+
+  disk {
+    datastore_id = var.datastore
+    interface    = "scsi0"
+    size         = "16"
+    iothread     = true
+    discard      = "ignore"
+  }
+
+  machine = "q35"
+
+  clone {
+    vm_id = 150
+  }
+
+  initialization {
+    ip_config {
+      ipv4 {
+        address = "dhcp"
+      }
+    }
+  }
+
+  network_device {
+    bridge  = "vmbr0"
+    model   = "virtio"
+    vlan_id = "53"
+  }
+
+  operating_system {
+    type = "l26"
+  }
+  lifecycle {
+    ignore_changes = [
+      clone
+    ]
   }
 }
 
@@ -213,6 +304,8 @@ resource "proxmox_virtual_environment_vm" "jd-torrent-01" {
     down_delay = "60"
   }
 
+  scsi_hardware = "virtio-scsi-single"
+
   disk {
     datastore_id = var.datastore
     interface    = "scsi0"
@@ -243,6 +336,11 @@ resource "proxmox_virtual_environment_vm" "jd-torrent-01" {
 
   operating_system {
     type = "l26"
+  }
+  lifecycle {
+    ignore_changes = [
+      clone
+    ]
   }
 }
 

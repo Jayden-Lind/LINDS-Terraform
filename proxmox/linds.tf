@@ -55,6 +55,8 @@ resource "proxmox_virtual_environment_vm" "kubernetes_nodes_linds" {
 
   bios = "ovmf"
 
+  scsi_hardware = "virtio-scsi-single"
+
   disk {
     datastore_id = var.datastore
     interface    = "scsi0"
@@ -76,6 +78,11 @@ resource "proxmox_virtual_environment_vm" "kubernetes_nodes_linds" {
   operating_system {
     type = "l26"
   }
+  lifecycle {
+    ignore_changes = [
+      clone
+    ]
+  }
 }
 
 resource "proxmox_virtual_environment_vm" "linds-plex-01" {
@@ -95,11 +102,17 @@ resource "proxmox_virtual_environment_vm" "linds-plex-01" {
 
   machine = "q35"
 
+  scsi_hardware = "virtio-scsi-single"
+
   network_device {
     bridge  = "vmbr0"
     model   = "virtio"
     vlan_id = "300"
-
+  }
+  lifecycle {
+    ignore_changes = [
+      clone
+    ]
   }
 }
 
@@ -119,6 +132,7 @@ resource "proxmox_virtual_environment_vm" "linds-torrent-01" {
 
   bios = "ovmf"
 
+  scsi_hardware = "virtio-scsi-single"
 
   disk {
     datastore_id = var.datastore
@@ -139,5 +153,11 @@ resource "proxmox_virtual_environment_vm" "linds-torrent-01" {
     model   = "virtio"
     vlan_id     = "36"
 
+  }
+  lifecycle {
+    ignore_changes = [
+      clone,
+      initialization
+    ]
   }
 }

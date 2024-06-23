@@ -64,9 +64,15 @@ $ packer build -var-file=vars.auto.pkrvars.hcl -only=vsphere-iso.centos9 -force 
 
 2. Run the below command
 ```shell
-cd packer && packer build -var-file variables-proxmox.pkrvars.hcl proxmox.pkr.hcl
+cd packer && packer build -var-file=packer_jd.pkrvars.hcl -only=proxmox-iso.centos-9 -force . 
 ```
 
+**To build Ubuntu Server 2024 on proxmox**
+
+1. Run the below command
+```shell
+cd packer && packer build -var-file=packer_jd.pkrvars.hcl -only=proxmox-iso.ubuntu -force .
+```
 
 ## Terraform
 
@@ -117,9 +123,6 @@ State is kept on TrueNAS NFS share, that is then rsync'd to secondary TrueNAS of
 3. Initialise Terraform and apply configuration
 
 ```shell
-$ terraform init
-
-$ terraform plan
-
-$ terraform apply
+$ terraform plan -var-file proxmox_jd_terraform.tfvars
+$ terraform plan -var-file proxmox_linds_terraform.tfvars
 ```
