@@ -75,6 +75,10 @@ resource "proxmox_virtual_environment_vm" "kubernetes_nodes_linds" {
     firewall = false
   }
 
+  clone {
+    vm_id = 150
+  }
+
   operating_system {
     type = "l26"
   }
