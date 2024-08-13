@@ -79,6 +79,14 @@ resource "proxmox_virtual_environment_vm" "kubernetes_nodes_linds" {
     vm_id = 150
   }
 
+  initialization {
+    ip_config {
+      ipv4 {
+        address = "dhcp"
+      }
+    }
+  }
+
   operating_system {
     type = "l26"
   }
