@@ -117,7 +117,7 @@ resource "proxmox_virtual_environment_vm" "kubernetes_nodes" {
   }
 }
 
-resource "proxmox_virtual_environment_vm" "jd-plex-01" {
+resource "proxmox_virtual_environment_vm" "jd-plex-02" {
   name       = "JD-Plex-01"
   tags       = ["plex"]
   node_name  = var.hostname
@@ -167,7 +167,7 @@ resource "proxmox_virtual_environment_vm" "jd-plex-01" {
   machine = "q35"
 
   clone {
-    vm_id = 109
+    vm_id = 150
   }
 
   initialization {
@@ -176,7 +176,6 @@ resource "proxmox_virtual_environment_vm" "jd-plex-01" {
         address = "dhcp"
       }
     }
-
   }
 
   network_device {

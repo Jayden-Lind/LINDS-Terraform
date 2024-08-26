@@ -97,7 +97,7 @@ resource "proxmox_virtual_environment_vm" "kubernetes_nodes_linds" {
   }
 }
 
-resource "proxmox_virtual_environment_vm" "linds-plex-01" {
+resource "proxmox_virtual_environment_vm" "linds-plex-02" {
   provider  = proxmox.linds
   name       = "LINDS-Plex-01"
   node_name  = var.hostname_linds
@@ -115,6 +115,26 @@ resource "proxmox_virtual_environment_vm" "linds-plex-01" {
   machine = "q35"
 
   scsi_hardware = "virtio-scsi-single"
+
+  clone {
+    vm_id = 150
+  }
+
+  initialization {
+    ip_config {
+      ipv4 {
+        address = "dhcp"
+      }
+    }
+  }
+
+  disk {
+    datastore_id = var.datastore
+    interface    = "scsi0"
+    size         = "20"
+    iothread     = true
+    discard      = "ignore"
+  }
 
   network_device {
     bridge  = "vmbr0"
