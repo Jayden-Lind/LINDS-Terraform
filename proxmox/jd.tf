@@ -63,6 +63,7 @@ resource "proxmox_virtual_environment_vm" "kubernetes_nodes" {
       "-hv-evmcs",
       "+aes",
     ]
+    numa = true
   }
   memory {
     dedicated = var.kubernetes[count.index].ram
@@ -89,7 +90,7 @@ resource "proxmox_virtual_environment_vm" "kubernetes_nodes" {
   scsi_hardware = "virtio-scsi-single"
 
   clone {
-    vm_id = 150 
+    vm_id = 150
   }
 
   initialization {
@@ -118,9 +119,9 @@ resource "proxmox_virtual_environment_vm" "kubernetes_nodes" {
 }
 
 resource "proxmox_virtual_environment_vm" "jd-plex-02" {
-  name       = "JD-Plex-01"
-  tags       = ["plex"]
-  node_name  = var.hostname
+  name      = "JD-Plex-01"
+  tags      = ["plex"]
+  node_name = var.hostname
   agent {
     enabled = true
   }
@@ -141,6 +142,7 @@ resource "proxmox_virtual_environment_vm" "jd-plex-02" {
       "-hv-evmcs",
       "+aes",
     ]
+    numa = true
   }
   memory {
     dedicated = "4096"
@@ -179,8 +181,8 @@ resource "proxmox_virtual_environment_vm" "jd-plex-02" {
   }
 
   network_device {
-    bridge  = "vmbr0"
-    model   = "virtio"
+    bridge = "vmbr0"
+    model  = "virtio"
 
   }
 
@@ -195,9 +197,9 @@ resource "proxmox_virtual_environment_vm" "jd-plex-02" {
 }
 
 resource "proxmox_virtual_environment_vm" "jd-torrent-01" {
-  name       = "JD-Torrent-01"
-  tags       = ["torrent"]
-  node_name  = var.hostname
+  name      = "JD-Torrent-01"
+  tags      = ["torrent"]
+  node_name = var.hostname
   agent {
     enabled = true
   }
@@ -218,6 +220,7 @@ resource "proxmox_virtual_environment_vm" "jd-torrent-01" {
       "-hv-evmcs",
       "+aes",
     ]
+    numa = true
   }
   memory {
     dedicated = "16384"

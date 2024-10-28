@@ -60,7 +60,7 @@ resource "proxmox_virtual_environment_vm" "kubernetes_nodes_linds" {
   disk {
     datastore_id = var.datastore
     interface    = "scsi0"
-    size         = "20"
+    size         = "30"
     iothread     = false
     discard      = "ignore"
     cache        = "none"
