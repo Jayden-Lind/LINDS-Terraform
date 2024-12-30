@@ -80,7 +80,7 @@ resource "proxmox_virtual_environment_vm" "kubernetes_nodes" {
   disk {
     datastore_id = var.datastore
     interface    = "scsi0"
-    size         = "16"
+    size         = "25"
     iothread     = true
     discard      = "ignore"
   }
