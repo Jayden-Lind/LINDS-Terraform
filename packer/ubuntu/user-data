@@ -22,6 +22,7 @@ autoinstall:
   updates: all
   packages:
     - qemu-guest-agent
+    - cloud-initramfs-growroot
   late-commands:
      - curtin in-target -- sudo bash -c "echo uninitialized > /etc/machine-id"
      - curtin in-target -- sudo bash -c "echo uninitialized > /var/lib/dbus/machine-id"
@@ -29,9 +30,9 @@ autoinstall:
     preserve_hostname: false
     growpart:
       mode: auto
-      devices: ["/"]
+      devices: ["/dev/sda3"]
       ignore_growroot_disabled: false
-    resize_rootfs: noblock
+    resize_rootfs: true
     ssh_authorized_keys:
       [
         "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDPWOKxGwpEJ/BU5h71sdPWdnuTgZzx4KRlApHZpoPJUYwDQUHYCXCHsbRrgRUTOuzCJ0Z5HAkDRBUJP8duHgtW7heCv2Emb5HfIbQFierkJnaSwjT68B9JNS8z4w6nNUPViXlPn4IN/hmt2YAWts1i+7xQf0laxyZiHvqm2CQyKUpWYg5KrGgLurZdatDAfEcTgxmVB2OzEH9JREn9pW/9wYIB3dJX5Exvbq8y4ptDiTx2q42DRybHVifIKkAKxOE/pvfTIN++7IKXq6G8uWKefrHLDzdyzpXIg+yqN/uWHb0rWRVe6wmI5EwIlL0jdro/3skbw3bSORDIpZaMWZL+F18HhNW9eW7vKGK2heWzehBlUmmwXJiR3C6qmLiv+lBMvgGB/UZ4eA9x5hvVdQ8WQDJnzdjXhnsmd9yS9btGsm4Gqz+WQGYPHs2GsLMfWlY5TAxM/Qn2Q4SDj7/QHjGsGMYQ+RhHchdjEART8Tiae/+SuA0BZxVPO6QDwLPCYVs= root@jd-dev-01",
@@ -49,7 +50,28 @@ autoinstall:
           [
             "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDPWOKxGwpEJ/BU5h71sdPWdnuTgZzx4KRlApHZpoPJUYwDQUHYCXCHsbRrgRUTOuzCJ0Z5HAkDRBUJP8duHgtW7heCv2Emb5HfIbQFierkJnaSwjT68B9JNS8z4w6nNUPViXlPn4IN/hmt2YAWts1i+7xQf0laxyZiHvqm2CQyKUpWYg5KrGgLurZdatDAfEcTgxmVB2OzEH9JREn9pW/9wYIB3dJX5Exvbq8y4ptDiTx2q42DRybHVifIKkAKxOE/pvfTIN++7IKXq6G8uWKefrHLDzdyzpXIg+yqN/uWHb0rWRVe6wmI5EwIlL0jdro/3skbw3bSORDIpZaMWZL+F18HhNW9eW7vKGK2heWzehBlUmmwXJiR3C6qmLiv+lBMvgGB/UZ4eA9x5hvVdQ8WQDJnzdjXhnsmd9yS9btGsm4Gqz+WQGYPHs2GsLMfWlY5TAxM/Qn2Q4SDj7/QHjGsGMYQ+RhHchdjEART8Tiae/+SuA0BZxVPO6QDwLPCYVs= root@jd-dev-01",
           ]
+    write_files:
+      - path: /etc/systemd/system/expand-root-lv.service
+        permissions: "0644"
+        content: |
+          [Unit]
+          Description=Grow root LV and filesystem to fill VG
+          After=cloud-init-local.service cloud-init.service
+          Requires=cloud-init.service
+          ConditionPathExists=/dev/mapper/ubuntu--vg-ubuntu--lv
+
+          [Service]
+          Type=oneshot
+          # first make sure the PV now knows its new size
+          ExecStartPre=/sbin/pvresize /dev/sda3
+          # then grow the LV **and** the filesystem in one step
+          ExecStart=/sbin/lvextend -l +100%%FREE --resizefs /dev/mapper/ubuntu--vg-ubuntu--lv
+          RemainAfterExit=yes
+
+          [Install]
+          WantedBy=multi-user.target
     runcmd:
+      - systemctl enable expand-root-lv.service
       - sudo bash -c "echo uninitialized > /etc/machine-id"
       - sudo bash -c "echo uninitialized > /var/lib/dbus/machine-id"
-      - [cloud-init, clean, "--machine-id"]
+      - cloud-init clean --logs --machine-id  

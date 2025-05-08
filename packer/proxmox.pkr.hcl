@@ -60,7 +60,7 @@ source "proxmox-iso" "ubuntu" {
     "e<wait>",
     "<down><down><down>",
     "<end><bs><bs><bs><bs><wait>",
-    "autoinstall ds=nocloud-net\\;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ ---<wait>",
+    "autoinstall cloud-config-url=/dev/null ds=nocloud-net\\;seedfrom=http://${var.builder_ip}:{{ .HTTPPort }}/ --<wait>",
     "<f10><wait>"
   ]
   insecure_skip_tls_verify = true
@@ -148,11 +148,16 @@ variable "proxmox_storage_pool_type" {
   default = ""
 }
 
+variable "builder_ip" {
+  type    = string
+  default = ""
+}
+
 
 packer {
   required_plugins {
     name = {
-      version = "~> 1"
+      version = "~> 1.2.2"
       source  = "github.com/hashicorp/proxmox"
     }
   }
