@@ -1,0 +1,12 @@
+# Talos worker configuration for Packer
+# IMPORTANT: Replace <CONTROL_PLANE_VIP> with the virtual IP for your control plane.
+clusterName: my-talos-cluster
+clusterEndpoint: https://<CONTROL_PLANE_VIP>:6443
+machineType: worker
+talosVersion: v1.7 # Please adjust to your Talos ISO version
+install:
+  image: factory.talos.dev/installer/v1.7.0 # Please adjust to your Talos ISO version
+  disk: /dev/sda
+machineDisks:
+  - device: /dev/sda
+

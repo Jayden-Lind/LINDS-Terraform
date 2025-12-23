@@ -119,10 +119,18 @@ State is kept on TrueNAS NFS share, that is then rsync'd to secondary TrueNAS of
 
 2. Copy and rename [terraform.tfvars.example](/proxmox/terraform.tfvars.example)
 
+3. Copy and rename [backend.conf.example](/proxmox/backend.conf.example) to `backend.conf` and fill in your MinIO/S3 credentials.
 
-3. Initialise Terraform and apply configuration
+4. Initialise Terraform and apply configuration
 
 ```shell
+$ terraform init -backend-config=backend.conf
 $ terraform plan -var-file proxmox_jd_terraform.tfvars
 $ terraform plan -var-file proxmox_linds_terraform.tfvars
 ```
+
+
+### Talos
+terraform destroy -var-file=proxmox_jd_terraform.tfvars -target=proxmox_virtual_environment_vm.talos_cp -target=proxmox_virtual_environment_vm.talos_worker
+
+run it twice, reboot nodes after second run

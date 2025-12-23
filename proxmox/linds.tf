@@ -19,12 +19,16 @@ variable "linds_kubernetes" {
   ]
 }
 
+variable "datastore" {
+  default = "local-lvm"
+}
+
 variable "hostname_linds" {
   default = "linds-proxmox-01"
 }
 
 resource "proxmox_virtual_environment_vm" "kubernetes_nodes_linds" {
-  provider = proxmox.linds
+  provider   = proxmox.linds
   count      = length(var.linds_kubernetes)
   depends_on = [proxmox_virtual_environment_file.kube_cloud_config]
   name       = var.linds_kubernetes[count.index].name
@@ -32,8 +36,9 @@ resource "proxmox_virtual_environment_vm" "kubernetes_nodes_linds" {
   node_name  = var.hostname_linds
 
   cpu {
-    type  = "host"
-    cores = var.linds_kubernetes[count.index].cores
+    type         = "host"
+    architecture = "x86_64"
+    cores        = var.linds_kubernetes[count.index].cores
     flags = [
       "-md-clear",
       "-pcid",
@@ -69,9 +74,9 @@ resource "proxmox_virtual_environment_vm" "kubernetes_nodes_linds" {
   machine = "q35"
 
   network_device {
-    bridge  = "vmbr0"
-    model   = "virtio"
-    vlan_id = "300"
+    bridge   = "vmbr0"
+    model    = "virtio"
+    vlan_id  = "300"
     firewall = false
   }
 
@@ -99,12 +104,13 @@ resource "proxmox_virtual_environment_vm" "kubernetes_nodes_linds" {
 
 resource "proxmox_virtual_environment_vm" "linds-plex-02" {
   provider  = proxmox.linds
-  name       = "LINDS-Plex-01"
-  node_name  = var.hostname_linds
+  name      = "LINDS-Plex-01"
+  node_name = var.hostname_linds
 
   cpu {
-    type  = "host"
-    cores = "4"
+    type         = "host"
+    cores        = "4"
+    architecture = "x86_64"
   }
   memory {
     dedicated = "4096"
@@ -149,14 +155,15 @@ resource "proxmox_virtual_environment_vm" "linds-plex-02" {
 }
 
 resource "proxmox_virtual_environment_vm" "linds-torrent-01" {
-  provider  = proxmox.linds
-  name       = "LINDS-Torrent-01"
+  provider = proxmox.linds
+  name     = "LINDS-Torrent-01"
 
-  node_name  = var.hostname_linds
+  node_name = var.hostname_linds
 
   cpu {
-    type  = "host"
-    cores = "4"
+    type         = "host"
+    cores        = "4"
+    architecture = "x86_64"
   }
   memory {
     dedicated = "4096"
@@ -183,7 +190,7 @@ resource "proxmox_virtual_environment_vm" "linds-torrent-01" {
   network_device {
     bridge  = "vmbr0"
     model   = "virtio"
-    vlan_id     = "36"
+    vlan_id = "36"
 
   }
   lifecycle {

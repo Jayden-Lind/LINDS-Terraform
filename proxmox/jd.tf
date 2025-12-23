@@ -9,7 +9,7 @@ variable "kubernetes" {
     {
       name  = "jd-kube-01"
       cores = "4"
-      ram   = 8192
+      ram   = 16384
     },
     {
       name  = "jd-kube-02"
@@ -29,12 +29,12 @@ variable "kubernetes" {
   ]
 }
 
-variable "datastore" {
-  default = "local-lvm"
+variable "datastore_jd" {
+  default = "ssd-mixed"
 }
 
 variable "hostname" {
-  default = "jd-proxmox-01"
+  default = "jd-proxmox-02"
 }
 
 resource "proxmox_virtual_environment_vm" "kubernetes_nodes" {
@@ -47,8 +47,9 @@ resource "proxmox_virtual_environment_vm" "kubernetes_nodes" {
     enabled = true
   }
   cpu {
-    type  = "host"
-    cores = var.kubernetes[count.index].cores
+    type         = "host"
+    architecture = "x86_64"
+    cores        = var.kubernetes[count.index].cores
     flags = [
       "-md-clear",
       "-pcid",
@@ -78,7 +79,7 @@ resource "proxmox_virtual_environment_vm" "kubernetes_nodes" {
   }
 
   disk {
-    datastore_id = var.datastore
+    datastore_id = var.datastore_jd
     interface    = "scsi0"
     size         = "75"
     iothread     = true
@@ -126,8 +127,9 @@ resource "proxmox_virtual_environment_vm" "jd-plex-02" {
     enabled = true
   }
   cpu {
-    type  = "host"
-    cores = "4"
+    type         = "host"
+    architecture = "x86_64"
+    cores        = "4"
     flags = [
       "-md-clear",
       "-pcid",
@@ -159,7 +161,7 @@ resource "proxmox_virtual_environment_vm" "jd-plex-02" {
   }
 
   disk {
-    datastore_id = var.datastore
+    datastore_id = var.datastore_jd
     interface    = "scsi0"
     size         = "16"
     iothread     = true
@@ -181,8 +183,10 @@ resource "proxmox_virtual_environment_vm" "jd-plex-02" {
   }
 
   network_device {
-    bridge = "vmbr0"
-    model  = "virtio"
+    bridge  = "vmbr0"
+    model   = "virtio"
+    vlan_id = 53
+    queues  = 4
 
   }
 
@@ -204,8 +208,9 @@ resource "proxmox_virtual_environment_vm" "jd-torrent-01" {
     enabled = true
   }
   cpu {
-    type  = "host"
-    cores = "8"
+    type         = "host"
+    cores        = "8"
+    architecture = "x86_64"
     flags = [
       "-md-clear",
       "-pcid",
@@ -237,7 +242,7 @@ resource "proxmox_virtual_environment_vm" "jd-torrent-01" {
   scsi_hardware = "virtio-scsi-single"
 
   disk {
-    datastore_id = var.datastore
+    datastore_id = var.datastore_jd
     interface    = "scsi0"
     size         = "16"
     iothread     = true
@@ -274,6 +279,162 @@ resource "proxmox_virtual_environment_vm" "jd-torrent-01" {
   }
 }
 
+resource "proxmox_virtual_environment_vm" "talos_cp" {
+  name      = "talos-cp-01"
+  tags      = ["kubernetes", "control-plane", "talos"]
+  node_name = var.hostname
+  agent {
+    enabled = true
+  }
+  cpu {
+    type         = "host"
+    architecture = "x86_64"
+    cores        = 4
+    flags = [
+      "-md-clear",
+      "-pcid",
+      "-spec-ctrl",
+      "-ssbd",
+      "-ibpb",
+      "-virt-ssbd",
+      "-amd-ssbd",
+      "-amd-no-ssb",
+      "-pdpe1gb",
+      "-hv-tlbflush",
+      "-hv-evmcs",
+      "+aes",
+    ]
+  }
+  memory {
+    dedicated = 16384
+  }
+
+  bios       = "ovmf"
+  boot_order = ["scsi0", "ide3"]
+
+  startup {
+    order      = "8"
+    up_delay   = "60"
+    down_delay = "60"
+  }
+
+  disk {
+    datastore_id = var.datastore_jd
+    interface    = "scsi0"
+    size         = "75"
+    iothread     = true
+    discard      = "ignore"
+  }
+
+  machine = "q35"
+
+  scsi_hardware = "virtio-scsi-single"
+
+  cdrom {
+    file_id = "local:iso/talos.iso"
+  }
+
+  network_device {
+    bridge      = "vmbr0"
+    model       = "virtio"
+    vlan_id     = "53"
+    mac_address = "BC:24:11:D4:F3:C1"
+  }
+
+  operating_system {
+    type = "l26"
+  }
+  lifecycle {
+    ignore_changes = [
+      clone
+    ]
+  }
+}
+
+locals {
+  # Stable, locally-administered MACs for Talos workers (one per worker index).
+  # Keep these unique within your L2 domain.
+  talos_worker_mac_addresses = [
+    "02:24:11:d4:f3:d1",
+    "02:24:11:d4:f3:d2",
+    "02:24:11:d4:f3:d3",
+  ]
+}
+
+resource "proxmox_virtual_environment_vm" "talos_worker" {
+  count     = 3
+  name      = "talos-worker-${format("%02d", count.index + 1)}"
+  tags      = ["kubernetes", "worker", "talos"]
+  node_name = var.hostname
+  agent {
+    enabled = true
+  }
+  cpu {
+    type         = "host"
+    architecture = "x86_64"
+    cores        = 4
+    flags = [
+      "-md-clear",
+      "-pcid",
+      "-spec-ctrl",
+      "-ssbd",
+      "-ibpb",
+      "-virt-ssbd",
+      "-amd-ssbd",
+      "-amd-no-ssb",
+      "-pdpe1gb",
+      "-hv-tlbflush",
+      "-hv-evmcs",
+      "+aes",
+    ]
+  }
+  memory {
+    dedicated = 16384
+  }
+
+  bios       = "ovmf"
+  boot_order = ["scsi0", "ide3"]
+
+  startup {
+    order      = "8"
+    up_delay   = "60"
+    down_delay = "60"
+  }
+
+  disk {
+    datastore_id = var.datastore_jd
+    interface    = "scsi0"
+    size         = "75"
+    iothread     = true
+    discard      = "ignore"
+  }
+
+  machine = "q35"
+
+  scsi_hardware = "virtio-scsi-single"
+
+  cdrom {
+    file_id = "local:iso/talos.iso"
+  }
+
+  network_device {
+    bridge      = "vmbr0"
+    model       = "virtio"
+    vlan_id     = "53"
+    mac_address = local.talos_worker_mac_addresses[count.index]
+
+  }
+
+  operating_system {
+    type = "l26"
+  }
+  lifecycle {
+    ignore_changes = [
+      clone
+    ]
+  }
+}
+
 resource "proxmox_virtual_environment_file" "kube_cloud_config" {
   content_type = "snippets"
   datastore_id = "local"
@@ -295,13 +456,13 @@ resource "proxmox_virtual_environment_network_linux_bridge" "LAN_Interface" {
   node_name = var.hostname
   name      = "vmbr0"
 
-  address    = "10.0.50.245/24"
+  address    = "10.0.50.246/24"
   gateway    = "10.0.50.1"
   vlan_aware = true
-  comment    = "Main LAN"
-
+  comment    = "LAN"
+  mtu        = 1500
   ports = [
-    "ens1f0np0"
+    "ens5f1np1"
   ]
 }
 
@@ -310,9 +471,9 @@ resource "proxmox_virtual_environment_network_linux_bridge" "WAN_Interface" {
   node_name = var.hostname
   name      = "vmbr1"
 
-  comment = "WAN Port"
+  comment = "WAN"
 
   ports = [
-    "ens1f1np1"
+    "ens5f0np0"
   ]
 }
