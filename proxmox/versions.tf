@@ -40,15 +40,15 @@ provider "proxmox" {
     username = var.proxmox_ssh_username
     password = var.proxmox_ssh_password
     node {
-      name    = "jd-proxmox-01"
-      address = "10.0.50.245"
+      name    = "jd-proxmox-02"
+      address = "10.0.50.246"
     }
   }
 }
 
 provider "proxmox" {
   alias    = "linds"
-  endpoint = "https://192.168.6.205:8006"
+  endpoint = var.proxmox_linds_endpoint
   username = var.proxmox_username
   password = var.proxmox_password
   insecure = true

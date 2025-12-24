@@ -23,7 +23,8 @@ data "talos_client_configuration" "this" {
 
   nodes = concat(
     ["10.0.53.200"],
-    [for i in range(3) : "10.0.53.${201 + i}"]
+    [for i in range(3) : "10.0.53.${201 + i}"],
+    [for i in range(2) : "10.3.1.${100 + i}"]
   )
 }
 
@@ -38,8 +39,8 @@ resource "talos_machine_configuration_apply" "controlplane" {
     yamlencode({
       machine = {
         install = {
-          image = "factory.talos.dev/installer/88d1f7a5c4f1d3aba7df787c448c1d3d008ed29cfb34af53fa0df4336a56040b:v1.11.6"
-          disk = "/dev/sda"
+          image = "ghcr.io/siderolabs/installer:v1.12.0"
+          disk  = "/dev/sda"
           extensions = [
             {
               image = "ghcr.io/siderolabs/nfsd:v1.11.6"
@@ -47,7 +48,13 @@ resource "talos_machine_configuration_apply" "controlplane" {
             {
               image = "ghcr.io/siderolabs/nfs-utils:v0.1.1"
             },
+            {
+              image = "ghcr.io/siderolabs/isci-tools:v0.1.6"
+            },
           ]
+        }
+        kubelet = {
+          image = "ghcr.io/siderolabs/kubelet:v1.35.0-fat"
         }
       }
       cluster = {
@@ -99,7 +106,7 @@ resource "talos_machine_configuration_apply" "worker" {
       machine = {
         install = {
           disk  = "/dev/sda"
-          image = "factory.talos.dev/installer/88d1f7a5c4f1d3aba7df787c448c1d3d008ed29cfb34af53fa0df4336a56040b:v1.11.6"
+          image = "ghcr.io/siderolabs/installer:v1.12.0"
           extensions = [
             {
               image = "ghcr.io/siderolabs/nfsd:v1.11.6"
@@ -107,7 +114,13 @@ resource "talos_machine_configuration_apply" "worker" {
             {
               image = "ghcr.io/siderolabs/nfs-utils:v0.1.1"
             },
+            {
+              image = "ghcr.io/siderolabs/isci-tools:v0.1.6"
+            },
           ]
+        }
+        kubelet = {
+          image = "ghcr.io/siderolabs/kubelet:v1.35.0-fat"
         }
       }
       cluster = {
@@ -117,8 +130,50 @@ resource "talos_machine_configuration_apply" "worker" {
           }
         }
       }
+
   })]
 
+}
+
+resource "talos_machine_configuration_apply" "worker_linds" {
+  count                       = 2
+  client_configuration        = talos_machine_secrets.this.client_configuration
+  machine_configuration_input = data.talos_machine_configuration.worker.machine_configuration
+  node                        = "10.3.1.${100 + count.index}"
+  depends_on = [
+    proxmox_virtual_environment_vm.talos_worker_linds
+  ]
+  config_patches = [
+    yamlencode({
+      machine = {
+        install = {
+          disk  = "/dev/sda"
+          image = "ghcr.io/siderolabs/installer:v1.12.0"
+          extensions = [
+            {
+              image = "ghcr.io/siderolabs/nfsd:v1.11.6"
+            },
+            {
+              image = "ghcr.io/siderolabs/nfs-utils:v0.1.1"
+            },
+            {
+              image = "ghcr.io/siderolabs/isci-tools:v0.1.6"
+            },
+          ]
+        }
+        kubelet = {
+          image = "ghcr.io/siderolabs/kubelet:v1.35.0-fat"
+        }
+      }
+      cluster = {
+        network = {
+          cni = {
+            name = "none"
+          }
+        }
+      }
+    })
+  ]
 }
 
 resource "talos_machine_bootstrap" "this" {
@@ -231,4 +286,38 @@ output "talosconfig" {
 output "kubeconfig" {
   value     = talos_cluster_kubeconfig.this.kubeconfig_raw
   sensitive = true
+}
+
+resource "null_resource" "node_labels" {
+  depends_on = [
+    talos_cluster_kubeconfig.this,
+    talos_machine_configuration_apply.controlplane,
+    talos_machine_configuration_apply.worker,
+    talos_machine_configuration_apply.worker_linds
+  ]
+
+  triggers = {
+    always_run = "${timestamp()}"
+  }
+
+  provisioner "local-exec" {
+    command     = <<EOT
+      export KUBECONFIG=${path.module}/kubeconfig
+
+      # Label JD Control Plane and Workers
+      NODES_JD=$(kubectl get nodes --no-headers -o custom-columns=":metadata.name" | grep -E "^talos-cp|^talos-worker" || true)
+      for node in $NODES_JD; do
+        [ -z "$node" ] && continue
+        kubectl label nodes $node datacenter=jd --overwrite
+      done
+
+      # Label Linds Workers
+      NODES_LINDS=$(kubectl get nodes --no-headers -o custom-columns=":metadata.name" | grep "^talos-linds-worker" || true)
+      for node in $NODES_LINDS; do
+        [ -z "$node" ] && continue
+        kubectl label nodes $node datacenter=linds --overwrite
+      done
+    EOT
+    interpreter = ["/bin/bash", "-c"]
+  }
 }
