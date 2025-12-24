@@ -111,7 +111,7 @@ resource "proxmox_virtual_environment_vm" "talos_worker_linds" {
   tags      = ["kubernetes", "worker", "talos"]
   node_name = var.hostname_linds
   agent {
-    enabled = false
+    enabled = true
   }
   cpu {
     type         = "host"

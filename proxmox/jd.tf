@@ -163,7 +163,7 @@ resource "proxmox_virtual_environment_vm" "talos_cp" {
   tags      = ["kubernetes", "control-plane", "talos"]
   node_name = var.hostname
   agent {
-    enabled = false
+    enabled = true
   }
   cpu {
     type         = "host"
@@ -244,7 +244,7 @@ resource "proxmox_virtual_environment_vm" "talos_worker" {
   tags      = ["kubernetes", "worker", "talos"]
   node_name = var.hostname
   agent {
-    enabled = false
+    enabled = true
   }
   cpu {
     type         = "host"

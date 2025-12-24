@@ -1,6 +1,118 @@
 resource "talos_machine_secrets" "this" {
 }
 
+resource "talos_image_factory_schematic" "this" {
+  schematic = yamlencode({
+    customization = {
+      extraKernelArgs = [
+        "mitigations=off",
+        "talos.auditd.disabled=1",
+        "-init_on_alloc",
+        "-init_on_free",
+        "-selinux",
+        "init_on_alloc=0",
+        "init_on_free=0",
+        "security=none"
+      ]
+      systemExtensions = {
+        officialExtensions = [
+          "siderolabs/crun",
+          "siderolabs/iscsi-tools",
+          "siderolabs/nfs-utils",
+          "siderolabs/nfsd",
+          "siderolabs/qemu-guest-agent",
+          "siderolabs/util-linux-tools"
+        ]
+      }
+    }
+  })
+}
+
+locals {
+  talos_common_config = {
+    machine = {
+      install = {
+        disk  = "/dev/sda"
+        image = "factory.talos.dev/installer/${talos_image_factory_schematic.this.id}:v1.12.0"
+      }
+      kubelet = {
+        image = "ghcr.io/siderolabs/kubelet:v1.35.0-fat"
+      }
+    }
+    cluster = {
+      network = {
+        cni = {
+          name = "none"
+        }
+      }
+    }
+  }
+
+  talos_cp_config = {
+    cluster = {
+      allowSchedulingOnControlPlanes = true
+      apiServer = {
+        admissionControl = [
+          {
+            name = "PodSecurity"
+            configuration = {
+              apiVersion = "pod-security.admission.config.k8s.io/v1alpha1"
+              defaults = {
+                audit             = "privileged"
+                "audit-version"   = "latest"
+                enforce           = "privileged"
+                "enforce-version" = "latest"
+                warn              = "privileged"
+                "warn-version"    = "latest"
+              }
+              exemptions = {
+                namespaces     = ["calico-system"]
+                runtimeClasses = []
+                usernames      = []
+              }
+              kind = "PodSecurityConfiguration"
+            }
+          }
+        ]
+      }
+    }
+  }
+
+  calico_values = {
+    installation = {
+      calicoNetwork = {
+        containerIPForwarding = "Enabled"
+        bgp                   = "Enabled"
+        mtu                   = 1300
+        kubeProxyManagement   = "Enabled"
+        bpfNetworkBootstrap   = "Disabled"
+        linuxDataplane        = "BPF"
+        ipPools = [
+          {
+            name             = "default-ipv4-ippool"
+            cidr             = "10.244.0.0/16"
+            blockSize        = 26
+            encapsulation    = "IPIPCrossSubnet"
+            natOutgoing      = "Enabled"
+            disableBGPExport = false
+            nodeSelector     = "all()"
+          },
+          {
+            name           = "lb-172-16-1"
+            cidr           = "172.16.1.0/24"
+            blockSize      = 24
+            encapsulation  = "None"
+            natOutgoing    = "Disabled"
+            assignmentMode = "Automatic"
+            allowedUses    = ["LoadBalancer"]
+            nodeSelector   = "all()"
+          }
+        ]
+      }
+    }
+  }
+}
+
 data "talos_machine_configuration" "controlplane" {
   cluster_name     = "talos-cluster"
   cluster_endpoint = "https://10.0.53.200:6443"
@@ -36,60 +148,8 @@ resource "talos_machine_configuration_apply" "controlplane" {
     proxmox_virtual_environment_vm.talos_cp
   ]
   config_patches = [
-    yamlencode({
-      machine = {
-        install = {
-          image = "ghcr.io/siderolabs/installer:v1.12.0"
-          disk  = "/dev/sda"
-          extensions = [
-            {
-              image = "ghcr.io/siderolabs/nfsd:v1.11.6"
-            },
-            {
-              image = "ghcr.io/siderolabs/nfs-utils:v0.1.1"
-            },
-            {
-              image = "ghcr.io/siderolabs/isci-tools:v0.1.6"
-            },
-          ]
-        }
-        kubelet = {
-          image = "ghcr.io/siderolabs/kubelet:v1.35.0-fat"
-        }
-      }
-      cluster = {
-        network = {
-          cni = {
-            name = "none"
-          }
-        }
-        allowSchedulingOnControlPlanes = true
-        apiServer = {
-          admissionControl = [
-            {
-              name = "PodSecurity"
-              configuration = {
-                apiVersion = "pod-security.admission.config.k8s.io/v1alpha1"
-                defaults = {
-                  audit             = "privileged"
-                  "audit-version"   = "latest"
-                  enforce           = "privileged"
-                  "enforce-version" = "latest"
-                  warn              = "privileged"
-                  "warn-version"    = "latest"
-                }
-                exemptions = {
-                  namespaces     = ["calico-system"]
-                  runtimeClasses = []
-                  usernames      = []
-                }
-                kind = "PodSecurityConfiguration"
-              }
-            }
-          ]
-        }
-      }
-    })
+    yamlencode(local.talos_common_config),
+    yamlencode(local.talos_cp_config)
   ]
 }
 
@@ -102,37 +162,8 @@ resource "talos_machine_configuration_apply" "worker" {
     proxmox_virtual_environment_vm.talos_worker
   ]
   config_patches = [
-    yamlencode({
-      machine = {
-        install = {
-          disk  = "/dev/sda"
-          image = "ghcr.io/siderolabs/installer:v1.12.0"
-          extensions = [
-            {
-              image = "ghcr.io/siderolabs/nfsd:v1.11.6"
-            },
-            {
-              image = "ghcr.io/siderolabs/nfs-utils:v0.1.1"
-            },
-            {
-              image = "ghcr.io/siderolabs/isci-tools:v0.1.6"
-            },
-          ]
-        }
-        kubelet = {
-          image = "ghcr.io/siderolabs/kubelet:v1.35.0-fat"
-        }
-      }
-      cluster = {
-        network = {
-          cni = {
-            name = "none"
-          }
-        }
-      }
-
-  })]
-
+    yamlencode(local.talos_common_config)
+  ]
 }
 
 resource "talos_machine_configuration_apply" "worker_linds" {
@@ -144,35 +175,7 @@ resource "talos_machine_configuration_apply" "worker_linds" {
     proxmox_virtual_environment_vm.talos_worker_linds
   ]
   config_patches = [
-    yamlencode({
-      machine = {
-        install = {
-          disk  = "/dev/sda"
-          image = "ghcr.io/siderolabs/installer:v1.12.0"
-          extensions = [
-            {
-              image = "ghcr.io/siderolabs/nfsd:v1.11.6"
-            },
-            {
-              image = "ghcr.io/siderolabs/nfs-utils:v0.1.1"
-            },
-            {
-              image = "ghcr.io/siderolabs/isci-tools:v0.1.6"
-            },
-          ]
-        }
-        kubelet = {
-          image = "ghcr.io/siderolabs/kubelet:v1.35.0-fat"
-        }
-      }
-      cluster = {
-        network = {
-          cni = {
-            name = "none"
-          }
-        }
-      }
-    })
+    yamlencode(local.talos_common_config)
   ]
 }
 
@@ -201,39 +204,7 @@ resource "helm_release" "calico" {
   version          = "v3.31.3"
 
   values = [
-    yamlencode({
-      installation = {
-        calicoNetwork = {
-          containerIPForwarding = "Enabled"
-          bgp                   = "Enabled"
-          mtu                   = 1300
-          kubeProxyManagement   = "Enabled"
-          bpfNetworkBootstrap   = "Disabled"
-          linuxDataplane        = "BPF"
-          ipPools = [
-            {
-              name             = "default-ipv4-ippool"
-              cidr             = "10.244.0.0/16"
-              blockSize        = 26
-              encapsulation    = "IPIPCrossSubnet"
-              natOutgoing      = "Enabled"
-              disableBGPExport = false
-              nodeSelector     = "all()"
-            },
-            {
-              name           = "lb-172-16-1"
-              cidr           = "172.16.1.0/24"
-              blockSize      = 24
-              encapsulation  = "None"
-              natOutgoing    = "Disabled"
-              assignmentMode = "Automatic"
-              allowedUses    = ["LoadBalancer"]
-              nodeSelector   = "all()"
-            }
-          ]
-        }
-      }
-    })
+    yamlencode(local.calico_values)
   ]
 
   depends_on = [
