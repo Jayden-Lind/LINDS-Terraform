@@ -96,10 +96,59 @@ source "proxmox-iso" "ubuntu" {
   }
 }
 
+source "proxmox-iso" "talos" {
+  proxmox_url              = var.proxmox_url
+  vm_name                  = "packer-talos"
+  iso_file                 = "local:iso/talos.iso"
+  iso_checksum             = "none"
+  username                 = var.proxmox_username
+  password                 = var.proxmox_password
+  node                     = var.proxmox_node
+  iso_storage_pool         = "local"
+  boot_wait                = "1200s"
+  vm_id                    = "160"
+  insecure_skip_tls_verify = true
+  template_name            = "talos"
+  template_description     = "packer generated talos"
+  unmount_iso              = true
+  memory                   = 4096
+  cores                    = 2
+  http_directory           = "talos"
+  cpu_type                 = "host"
+  sockets                  = 1
+  os                       = "l26"
+  qemu_agent               = true
+  bios                     = "ovmf"
+  machine                  = "q35"
+  scsi_controller          = "virtio-scsi-single"
+  communicator             = "none"
+
+  boot_command = [
+    "<enter>",
+  ]
+
+  disks {
+    type              = "scsi"
+    disk_size         = "20G"
+    storage_pool      = var.proxmox_storage_pool
+    storage_pool_type = "lvm"
+    format            = "raw"
+    io_thread         = true
+  }
+
+  network_adapters {
+    bridge   = "vmbr0"
+    model    = "virtio"
+    firewall = false
+    vlan_tag = 53
+  }
+}
+
 build {
   sources = [
     "source.proxmox-iso.centos-9",
-    "source.proxmox-iso.ubuntu"  
+    "source.proxmox-iso.ubuntu",
+    "source.proxmox-iso.talos"
   ]
 }
 
@@ -157,7 +206,7 @@ variable "builder_ip" {
 packer {
   required_plugins {
     name = {
-      version = "~> 1.2.2"
+      version = "~> 1.2.3"
       source  = "github.com/hashicorp/proxmox"
     }
   }

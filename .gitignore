@@ -9,3 +9,6 @@ terraform.tfstate*
 variables-proxmox.pkrvars.hcl
 proxmox_*_terraform.tfvars
 packer_*.pkrvars.hcl
+/proxmox/talosconfig
+/proxmox/kubeconfig
+/proxmox/backend.conf

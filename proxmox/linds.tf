@@ -1,110 +1,12 @@
-variable "linds_kubernetes" {
-  type = list(object({
-    name  = string
-    cores = string
-    ram   = number
-  }))
-
-  default = [
-    {
-      name  = "linds-kube-01"
-      cores = "4"
-      ram   = 4096
-    },
-    {
-      name  = "linds-kube-02"
-      cores = "4"
-      ram   = 8192
-    },
-  ]
-}
-
-variable "hostname_linds" {
-  default = "linds-proxmox-01"
-}
-
-resource "proxmox_virtual_environment_vm" "kubernetes_nodes_linds" {
-  provider = proxmox.linds
-  count      = length(var.linds_kubernetes)
-  depends_on = [proxmox_virtual_environment_file.kube_cloud_config]
-  name       = var.linds_kubernetes[count.index].name
-  tags       = ["kubernetes"]
-  node_name  = var.hostname_linds
-
-  cpu {
-    type  = "host"
-    cores = var.linds_kubernetes[count.index].cores
-    flags = [
-      "-md-clear",
-      "-pcid",
-      "-spec-ctrl",
-      "-ssbd",
-      "-ibpb",
-      "-virt-ssbd",
-      "-amd-ssbd",
-      "-amd-no-ssb",
-      "-pdpe1gb",
-      "-hv-tlbflush",
-      "-hv-evmcs",
-      "+aes",
-    ]
-  }
-  memory {
-    dedicated = var.linds_kubernetes[count.index].ram
-  }
-
-  bios = "ovmf"
-
-  scsi_hardware = "virtio-scsi-single"
-
-  disk {
-    datastore_id = var.datastore
-    interface    = "scsi0"
-    size         = "75"
-    iothread     = false
-    discard      = "ignore"
-    cache        = "none"
-  }
-
-  machine = "q35"
-
-  network_device {
-    bridge  = "vmbr0"
-    model   = "virtio"
-    vlan_id = "300"
-    firewall = false
-  }
-
-  clone {
-    vm_id = 150
-  }
-
-  initialization {
-    ip_config {
-      ipv4 {
-        address = "dhcp"
-      }
-    }
-  }
-
-  operating_system {
-    type = "l26"
-  }
-  lifecycle {
-    ignore_changes = [
-      clone
-    ]
-  }
-}
-
 resource "proxmox_virtual_environment_vm" "linds-plex-02" {
   provider  = proxmox.linds
-  name       = "LINDS-Plex-01"
-  node_name  = var.hostname_linds
+  name      = "LINDS-Plex-01"
+  node_name = var.hostname_linds
 
   cpu {
-    type  = "host"
-    cores = "4"
+    type         = "host"
+    cores        = "4"
+    architecture = "x86_64"
   }
   memory {
     dedicated = "4096"
@@ -149,14 +51,15 @@ resource "proxmox_virtual_environment_vm" "linds-plex-02" {
 }
 
 resource "proxmox_virtual_environment_vm" "linds-torrent-01" {
-  provider  = proxmox.linds
-  name       = "LINDS-Torrent-01"
+  provider = proxmox.linds
+  name     = "LINDS-Torrent-01"
 
-  node_name  = var.hostname_linds
+  node_name = var.hostname_linds
 
   cpu {
-    type  = "host"
-    cores = "4"
+    type         = "host"
+    cores        = "4"
+    architecture = "x86_64"
   }
   memory {
     dedicated = "4096"
@@ -183,13 +86,95 @@ resource "proxmox_virtual_environment_vm" "linds-torrent-01" {
   network_device {
     bridge  = "vmbr0"
     model   = "virtio"
-    vlan_id     = "36"
+    vlan_id = "36"
 
   }
   lifecycle {
     ignore_changes = [
       clone,
       initialization
+    ]
+  }
+}
+
+locals {
+  linds_talos_worker_mac_addresses = [
+    "02:24:11:d4:f3:e1",
+    "02:24:11:d4:f3:e2",
+  ]
+}
+
+resource "proxmox_virtual_environment_vm" "talos_worker_linds" {
+  provider  = proxmox.linds
+  count     = 2
+  name      = "talos-linds-worker-${format("%02d", count.index + 1)}"
+  tags      = ["kubernetes", "worker", "talos"]
+  node_name = var.hostname_linds
+  agent {
+    enabled = true
+  }
+  cpu {
+    type         = "host"
+    architecture = "x86_64"
+    cores        = 4
+    flags = [
+      "-md-clear",
+      "-pcid",
+      "-spec-ctrl",
+      "-ssbd",
+      "-ibpb",
+      "-virt-ssbd",
+      "-amd-ssbd",
+      "-amd-no-ssb",
+      "-pdpe1gb",
+      "-hv-tlbflush",
+      "-hv-evmcs",
+      "+aes",
+    ]
+  }
+  memory {
+    dedicated = 8192
+  }
+
+  bios       = "ovmf"
+  boot_order = ["scsi0", "ide3"]
+
+  startup {
+    order      = "8"
+    up_delay   = "60"
+    down_delay = "60"
+  }
+
+  disk {
+    datastore_id = var.datastore
+    interface    = "scsi0"
+    size         = "75"
+    iothread     = true
+    discard      = "ignore"
+  }
+
+  machine = "q35"
+
+  scsi_hardware = "virtio-scsi-single"
+
+  cdrom {
+    file_id = "local:iso/talos.iso"
+  }
+
+  network_device {
+    bridge      = "vmbr0"
+    model       = "virtio"
+    vlan_id     = "300"
+    mac_address = local.linds_talos_worker_mac_addresses[count.index]
+
+  }
+
+  operating_system {
+    type = "l26"
+  }
+  lifecycle {
+    ignore_changes = [
+      clone
     ]
   }
 }

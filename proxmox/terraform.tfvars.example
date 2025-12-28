@@ -1,5 +1,7 @@
-proxmox_endpoint     = "https://xxx:8006"
-proxmox_password     = "xxx"
-proxmox_username     = "xxx@pam"
-proxmox_ssh_password = "xxx"
-proxmox_ssh_username = "xxx"
+proxmox_endpoint      = "https://xxx:8006"
+proxmox_linds_endpoint = "https://xxx:8006"
+proxmox_password      = "xxx"
+proxmox_username      = "xxx@pam"
+proxmox_ssh_password  = "xxx"
+proxmox_ssh_username  = "xxx"
+
