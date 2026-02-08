@@ -1,85 +1,4 @@
-resource "proxmox_virtual_environment_vm" "jd-plex-02" {
-  name      = "JD-Plex-01"
-  tags      = ["plex"]
-  node_name = var.hostname
-  agent {
-    enabled = true
-  }
-  cpu {
-    type         = "host"
-    architecture = "x86_64"
-    cores        = "4"
-    flags = [
-      "-md-clear",
-      "-pcid",
-      "-spec-ctrl",
-      "-ssbd",
-      "-ibpb",
-      "-virt-ssbd",
-      "-amd-ssbd",
-      "-amd-no-ssb",
-      "-pdpe1gb",
-      "-hv-tlbflush",
-      "-hv-evmcs",
-      "+aes",
-    ]
-    numa = true
-  }
-  memory {
-    dedicated = "4096"
-  }
-
-  bios = "ovmf"
-
-  scsi_hardware = "virtio-scsi-single"
-
-  startup {
-    order      = "6"
-    up_delay   = "60"
-    down_delay = "60"
-  }
-
-  disk {
-    datastore_id = var.datastore_jd
-    interface    = "scsi0"
-    size         = "16"
-    iothread     = true
-    discard      = "ignore"
-  }
-
-  machine = "q35"
-
-  clone {
-    vm_id = 150
-  }
-
-  initialization {
-    ip_config {
-      ipv4 {
-        address = "dhcp"
-      }
-    }
-  }
-
-  network_device {
-    bridge  = "vmbr0"
-    model   = "virtio"
-    vlan_id = 53
-    queues  = 4
-
-  }
-
-  operating_system {
-    type = "l26"
-  }
-  lifecycle {
-    ignore_changes = [
-      clone
-    ]
-  }
-}
-
-resource "proxmox_virtual_environment_vm" "jd-torrent-01" {
+resource "proxmox_virtual_environment_vm" "jd-torrent" {
   name      = "JD-Torrent-01"
   tags      = ["torrent"]
   node_name = var.hostname
@@ -131,7 +50,7 @@ resource "proxmox_virtual_environment_vm" "jd-torrent-01" {
   machine = "q35"
 
   clone {
-    vm_id = 109
+    vm_id = 150
   }
 
   initialization {

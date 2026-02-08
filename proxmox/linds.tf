@@ -9,7 +9,7 @@ resource "proxmox_virtual_environment_vm" "linds-plex-02" {
     architecture = "x86_64"
   }
   memory {
-    dedicated = "4096"
+    dedicated = "8192"
   }
 
   bios = "ovmf"
@@ -62,7 +62,7 @@ resource "proxmox_virtual_environment_vm" "linds-torrent-01" {
     architecture = "x86_64"
   }
   memory {
-    dedicated = "4096"
+    dedicated = "8192"
   }
 
   bios = "ovmf"
@@ -133,7 +133,7 @@ resource "proxmox_virtual_environment_vm" "talos_worker_linds" {
     ]
   }
   memory {
-    dedicated = 8192
+    dedicated = 16384
   }
 
   bios       = "ovmf"

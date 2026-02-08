@@ -33,7 +33,7 @@ locals {
     machine = {
       install = {
         disk  = "/dev/sda"
-        image = "factory.talos.dev/installer/${talos_image_factory_schematic.this.id}:v1.12.1"
+        image = "factory.talos.dev/installer/${talos_image_factory_schematic.this.id}:v1.12.3"
       }
       kubelet = {
         image = "ghcr.io/siderolabs/kubelet:v1.35.0-fat"
