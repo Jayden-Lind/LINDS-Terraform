@@ -126,7 +126,7 @@ resource "proxmox_virtual_environment_vm" "talos_worker_linds" {
       "-virt-ssbd",
       "-amd-ssbd",
       "-amd-no-ssb",
-      "-pdpe1gb",
+      "+pdpe1gb",
       "-hv-tlbflush",
       "-hv-evmcs",
       "+aes",
