@@ -101,10 +101,11 @@ locals {
       enabled = true
     }
     loadbalancer = {
-      accleration = "best-effort"
+      acceleration = "best-effort"
+      mode         = "hybrid"
     }
-    k8sServiceHost       = "localhost"
-    k8sServicePort       = 7445
+    k8sServiceHost = "localhost"
+    k8sServicePort = 7445
     securityContext = {
       capabilities = {
         ciliumAgent      = ["CHOWN", "KILL", "NET_ADMIN", "NET_RAW", "IPC_LOCK", "SYS_ADMIN", "SYS_RESOURCE", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"]
@@ -125,13 +126,19 @@ locals {
     bgpControlPlane = {
       enabled = true
     }
-    ipv4NativeRoutingCIDR = "10.244.0.0/16"
-    routingMode           = "native"
-    autoDirectNodeRoutes  = true
+    routingMode    = "tunnel"
+    tunnelProtocol = "vxlan"
+    tunnelPort     = 8472
+    mtu = 1300
+    autoDirectNodeRoutes = false
     bpf = {
-      masquerade          = true
-      lbExternalClusterIP = true
+      masquerade = true
+      distributedLRU = {
+        enabled = true
+      }
+      enableTCX = true
     }
+    enableIPv4Masquerade = true
   }
 }
 
@@ -341,7 +348,8 @@ spec:
     - cidr: 172.16.1.0/24
 EOF
 
-      # Apply BGP Advertisement for Services (LoadBalancer, External, and Cluster IPs)
+      # Apply BGP Advertisement for Services (LoadBalancer and ExternalIP only)
+      # NOTE: ClusterIP is NOT advertised - it must be handled internally by Cilium
       kubectl apply -f - <<EOF
 apiVersion: cilium.io/v2alpha1
 kind: CiliumBGPAdvertisement
@@ -356,7 +364,6 @@ spec:
         addresses:
           - LoadBalancerIP
           - ExternalIP
-          - ClusterIP
       selector:
         matchExpressions:
           - key: somekey
