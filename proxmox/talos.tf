@@ -38,6 +38,20 @@ locals {
       kubelet = {
         image = "ghcr.io/siderolabs/kubelet:v1.35.1-fat"
       }
+      features = {
+        hostDNS = {
+          enabled              = true
+          forwardKubeDNSToHost = true
+        }
+      }
+      network = {
+        interfaces = [
+          {
+            interface = "lo"
+            addresses = ["169.254.116.108/32"]
+          }
+        ]
+      }
     }
     cluster = {
       network = {
@@ -66,7 +80,7 @@ locals {
                 "warn-version"    = "latest"
               }
               exemptions = {
-                namespaces     = ["calico-system"]
+                namespaces     = []
                 runtimeClasses = []
                 usernames      = []
               }
@@ -78,37 +92,45 @@ locals {
     }
   }
 
-  calico_values = {
-    installation = {
-      calicoNetwork = {
-        containerIPForwarding = "Enabled"
-        bgp                   = "Enabled"
-        mtu                   = 1300
-        kubeProxyManagement   = "Enabled"
-        bpfNetworkBootstrap   = "Disabled"
-        linuxDataplane        = "BPF"
-        ipPools = [
-          {
-            name             = "default-ipv4-ippool"
-            cidr             = "10.244.0.0/16"
-            blockSize        = 26
-            encapsulation    = "IPIPCrossSubnet"
-            natOutgoing      = "Enabled"
-            disableBGPExport = false
-            nodeSelector     = "all()"
-          },
-          {
-            name           = "lb-172-16-1"
-            cidr           = "172.16.1.0/24"
-            blockSize      = 24
-            encapsulation  = "None"
-            natOutgoing    = "Disabled"
-            assignmentMode = "Automatic"
-            allowedUses    = ["LoadBalancer"]
-            nodeSelector   = "all()"
-          }
-        ]
+  cilium_values = {
+    ipam = {
+      mode = "kubernetes"
+    }
+    kubeProxyReplacement = true
+    socketLB = {
+      enabled = true
+    }
+    loadbalancer = {
+      accleration = "best-effort"
+    }
+    k8sServiceHost       = "localhost"
+    k8sServicePort       = 7445
+    securityContext = {
+      capabilities = {
+        ciliumAgent      = ["CHOWN", "KILL", "NET_ADMIN", "NET_RAW", "IPC_LOCK", "SYS_ADMIN", "SYS_RESOURCE", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"]
+        cleanCiliumState = ["NET_ADMIN", "SYS_ADMIN", "SYS_RESOURCE"]
       }
+    }
+    cgroup = {
+      autoMount = {
+        enabled = false
+      }
+      hostRoot = "/sys/fs/cgroup"
+    }
+    gatewayAPI = {
+      enabled           = true
+      enableAlpn        = true
+      enableAppProtocol = true
+    }
+    bgpControlPlane = {
+      enabled = true
+    }
+    ipv4NativeRoutingCIDR = "10.244.0.0/16"
+    routingMode           = "native"
+    autoDirectNodeRoutes  = true
+    bpf = {
+      masquerade          = true
+      lbExternalClusterIP = true
     }
   }
 }
@@ -195,16 +217,15 @@ resource "talos_cluster_kubeconfig" "this" {
   ]
 }
 
-resource "helm_release" "calico" {
-  name             = "calico"
-  repository       = "https://docs.projectcalico.org/charts"
-  chart            = "tigera-operator"
-  namespace        = "tigera-operator"
-  create_namespace = true
-  version          = "v3.31.3"
+resource "helm_release" "cilium" {
+  name             = "cilium"
+  repository       = "https://helm.cilium.io/"
+  chart            = "cilium"
+  namespace        = "kube-system"
+  version          = "1.19.0"
 
   values = [
-    yamlencode(local.calico_values)
+    yamlencode(local.cilium_values)
   ]
 
   depends_on = [
@@ -212,20 +233,170 @@ resource "helm_release" "calico" {
   ]
 }
 
-resource "kubernetes_config_map" "calico_kubernetes_services_endpoint" {
-  metadata {
-    name      = "kubernetes-services-endpoint"
-    namespace = "tigera-operator"
-  }
-
-  data = {
-    KUBERNETES_SERVICE_HOST = "10.0.53.200"
-    KUBERNETES_SERVICE_PORT = "6443"
-  }
-
+# Apply Cilium BGP configuration via kubectl to avoid CRD race condition
+resource "null_resource" "cilium_bgp_config" {
   depends_on = [
-    helm_release.calico
+    helm_release.cilium,
+    null_resource.node_labels
   ]
+
+  triggers = {
+    bgp_config_hash = sha256(jsonencode({
+      jd_asn             = 64512
+      linds_asn          = 64513
+      jd_peer            = "10.0.53.1"
+      linds_peer         = "10.3.1.1"
+      lb_cidr            = "172.16.1.0/24"
+      lb_pool_advertise  = true
+      config_version     = 2
+    }))
+  }
+
+  provisioner "local-exec" {
+    command     = <<EOT
+      export KUBECONFIG=${path.module}/kubeconfig
+
+      # Wait for Cilium CRDs to be available
+      echo "Waiting for Cilium CRDs..."
+      until kubectl get crd ciliumbgpclusterconfigs.cilium.io &>/dev/null; do
+        sleep 5
+      done
+      echo "Cilium CRDs are ready"
+
+      # Apply BGP Peer Config
+      kubectl apply -f - <<EOF
+apiVersion: cilium.io/v2alpha1
+kind: CiliumBGPPeerConfig
+metadata:
+  name: cilium-peer-config
+spec:
+  ebgpMultihop: 1
+  timers:
+    holdTimeSeconds: 90
+    keepAliveTimeSeconds: 30
+    connectRetryTimeSeconds: 120
+  gracefulRestart:
+    enabled: true
+    restartTimeSeconds: 120
+  families:
+    - afi: ipv4
+      safi: unicast
+      advertisements:
+        matchLabels:
+          advertise: bgp
+EOF
+
+      # Apply JD BGP Cluster Config
+      kubectl apply -f - <<EOF
+apiVersion: cilium.io/v2alpha1
+kind: CiliumBGPClusterConfig
+metadata:
+  name: cilium-bgp-jd
+spec:
+  nodeSelector:
+    matchLabels:
+      datacenter: jd
+  bgpInstances:
+    - name: jd-instance
+      localASN: 64512
+      peers:
+        - name: jd-vyos-01-peer
+          peerASN: 64550
+          peerAddress: 10.0.53.1
+          peerConfigRef:
+            name: cilium-peer-config
+EOF
+
+      # Apply LINDS BGP Cluster Config
+      kubectl apply -f - <<EOF
+apiVersion: cilium.io/v2alpha1
+kind: CiliumBGPClusterConfig
+metadata:
+  name: cilium-bgp-linds
+spec:
+  nodeSelector:
+    matchLabels:
+      datacenter: linds
+  bgpInstances:
+    - name: linds-instance
+      localASN: 64513
+      peers:
+        - name: linds-vyos-01-peer
+          peerASN: 64551
+          peerAddress: 10.3.1.1
+          peerConfigRef:
+            name: cilium-peer-config
+EOF
+
+      # Apply LoadBalancer IP Pool
+      kubectl apply -f - <<EOF
+apiVersion: cilium.io/v2alpha1
+kind: CiliumLoadBalancerIPPool
+metadata:
+  name: lb-pool
+  labels:
+    pool: lb
+spec:
+  blocks:
+    - cidr: 172.16.1.0/24
+EOF
+
+      # Apply BGP Advertisement for Services (LoadBalancer, External, and Cluster IPs)
+      kubectl apply -f - <<EOF
+apiVersion: cilium.io/v2alpha1
+kind: CiliumBGPAdvertisement
+metadata:
+  name: bgp-advertisements-service
+  labels:
+    advertise: bgp
+spec:
+  advertisements:
+    - advertisementType: Service
+      service:
+        addresses:
+          - LoadBalancerIP
+          - ExternalIP
+          - ClusterIP
+      selector:
+        matchExpressions:
+          - key: somekey
+            operator: NotIn
+            values: ['never-match-this']
+EOF
+
+      # Apply BGP Advertisement for PodCIDR
+      kubectl apply -f - <<EOF
+apiVersion: cilium.io/v2alpha1
+kind: CiliumBGPAdvertisement
+metadata:
+  name: bgp-advertisements-podcidr
+  labels:
+    advertise: bgp
+spec:
+  advertisements:
+    - advertisementType: PodCIDR
+EOF
+
+      # Apply BGP Advertisement for LoadBalancer IP Pool CIDR
+      kubectl apply -f - <<EOF
+apiVersion: cilium.io/v2alpha1
+kind: CiliumBGPAdvertisement
+metadata:
+  name: bgp-advertisements-lbpool
+  labels:
+    advertise: bgp
+spec:
+  advertisements:
+    - advertisementType: CiliumLoadBalancerIPPool
+      selector:
+        matchLabels:
+          pool: lb
+EOF
+
+      echo "Cilium BGP configuration applied successfully"
+    EOT
+    interpreter = ["/bin/bash", "-c"]
+  }
 }
 
 
