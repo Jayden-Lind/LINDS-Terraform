@@ -43,6 +43,30 @@ locals {
           enabled              = true
           forwardKubeDNSToHost = true
         }
+        kubePrism = {
+          enabled = true
+          port    = 7445
+        }
+      }
+      sysctls = {
+        "net.core.somaxconn"              = "65535"
+        "net.core.netdev_max_backlog"     = "65535"
+        "net.core.rmem_max"               = "16777216"
+        "net.core.wmem_max"               = "16777216"
+        "net.ipv4.tcp_rmem"               = "4096 87380 16777216"
+        "net.ipv4.tcp_wmem"               = "4096 65536 16777216"
+        "net.ipv4.tcp_max_syn_backlog"    = "65535"
+        "net.ipv4.tcp_tw_reuse"           = "1"
+        "net.ipv4.ip_local_port_range"    = "10240 65535"
+        "net.ipv4.tcp_fin_timeout"        = "15"
+        "net.ipv4.tcp_keepalive_time"     = "600"
+        "net.ipv4.tcp_keepalive_intvl"    = "30"
+        "net.ipv4.tcp_keepalive_probes"   = "10"
+        "net.netfilter.nf_conntrack_max"  = "1048576"
+        "fs.inotify.max_user_watches"     = "1048576"
+        "fs.inotify.max_user_instances"   = "8192"
+        "fs.file-max"                     = "2097152"
+        "vm.max_map_count"                = "262144"
       }
       network = {
         interfaces = [
@@ -50,6 +74,12 @@ locals {
             interface = "lo"
             addresses = ["169.254.116.108/32"]
           }
+        ]
+      }
+      time = {
+        servers = [
+          "time.cloudflare.com",
+          "pool.ntp.org"
         ]
       }
     }
@@ -104,6 +134,9 @@ locals {
       acceleration = "best-effort"
       mode         = "hybrid"
     }
+    pmtuDiscovery = {
+      enabled = true
+    }
     k8sServiceHost = "localhost"
     k8sServicePort = 7445
     securityContext = {
@@ -127,18 +160,37 @@ locals {
       enabled = true
     }
     routingMode    = "tunnel"
-    tunnelProtocol = "vxlan"
+    tunnelProtocol = "geneve"
     tunnelPort     = 8472
-    mtu = 1300
+    mtu            = 1400
     autoDirectNodeRoutes = false
     bpf = {
       masquerade = true
       distributedLRU = {
         enabled = true
       }
-      enableTCX = true
+      enableTCX           = true
+      lbExternalClusterIP = true
+      mapDynamicSizeRatio = 0.0025
+      lbMapMax = 65536
+      ctTcpMax = 524288
+      ctAnyMax = 262144
     }
+    enableIPv4BIGTCP = true
     enableIPv4Masquerade = true
+    enableTunnelBIGTCP = true
+    endpointRoutes = {
+      enabled = false
+    }
+
+    conntrackGCInterval = "0s"
+
+    wellKnownIdentities = {
+      enabled = true
+    }
+
+
+    bpfClockProbe = true
   }
 }
 
