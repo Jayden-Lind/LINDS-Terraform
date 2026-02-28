@@ -161,7 +161,7 @@ locals {
     }
     routingMode    = "tunnel"
     tunnelProtocol = "geneve"
-    tunnelPort     = 8472
+    tunnelPort     = 6081
     mtu            = 1400
     autoDirectNodeRoutes = false
     bpf = {
