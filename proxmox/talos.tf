@@ -281,7 +281,7 @@ resource "helm_release" "cilium" {
   repository       = "https://helm.cilium.io/"
   chart            = "cilium"
   namespace        = "kube-system"
-  version          = "1.19.0"
+  version          = "1.19.1"
 
   values = [
     yamlencode(local.cilium_values)

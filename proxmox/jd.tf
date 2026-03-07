@@ -87,7 +87,7 @@ resource "proxmox_virtual_environment_vm" "talos_cp" {
   cpu {
     type         = "host"
     architecture = "x86_64"
-    cores        = 4
+    cores        = 8
     flags = [
       "-md-clear",
       "-pcid",
@@ -168,7 +168,7 @@ resource "proxmox_virtual_environment_vm" "talos_worker" {
   cpu {
     type         = "host"
     architecture = "x86_64"
-    cores        = 4
+    cores        = 8
     flags = [
       "-md-clear",
       "-pcid",
