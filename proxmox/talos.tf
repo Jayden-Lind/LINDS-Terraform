@@ -1,18 +1,197 @@
 resource "talos_machine_secrets" "this" {
 }
 
-resource "talos_image_factory_schematic" "this" {
+resource "talos_image_factory_schematic" "amd" {
   schematic = yamlencode({
     customization = {
       extraKernelArgs = [
+        # ===== Disable ALL CPU vulnerability mitigations =====
         "mitigations=off",
+        "spectre_v2=off",
+        "spec_store_bypass_disable=off",
+        "l1tf=off",
+        "mds=off",
+        "tsx_async_abort=off",
+        "mmio_stale_data=off",
+        "retbleed=off",
+        "spec_rstack_overflow=off",
+        "gather_data_sampling=off",
+        "reg_file_data_sampling=off",
+        # 6.x+ mitigations to disable
+        "spectre_bhi=off",
+        "srso=off",
+        "rfds=off",
+        # Disable split lock detection (avoids #AC perf penalty)
+        "split_lock_detect=off",
+
+        # ===== Disable security subsystems =====
         "talos.auditd.disabled=1",
-        "-init_on_alloc",
-        "-init_on_free",
-        "-selinux",
         "init_on_alloc=0",
         "init_on_free=0",
-        "security=none"
+        "security=none",
+        "apparmor=0",
+        "lsm=",
+        "lockdown=none",
+        "randomize_kstack_offset=off",
+
+        # ===== Memory/NUMA performance =====
+        "transparent_hugepage=always",
+        "transparent_hugepage_shmem=always",
+        "numa_balancing=enable",
+        "default_hugepagesz=2M",
+        # Multi-gen LRU (MGLRU) - better page reclaim in 6.x
+        "lru_gen=Y",
+        "lru_gen_min_ttl=0",
+        # Disable memory allocation profiling overhead (6.8+)
+        "mem_profiling=off",
+
+        # ===== Scheduler and CPU performance (AMD EPYC 7B13 / Zen 3) =====
+        "idle=nomwait",
+        "processor.max_cstate=1",
+        "nohz_full=1-N",
+        "rcu_nocbs=1-N",
+        "nowatchdog",
+        "nmi_watchdog=0",
+        "tsc=reliable",
+        "clocksource=tsc",
+        "hpet=disable",
+        # AMD pstate driver (active mode for HW-managed P-states)
+        "amd_pstate=active",
+        "amd_pstate_prefcore=disable",
+        "cpufreq.default_governor=performance",
+
+        # ===== Reduce kernel overhead =====
+        "audit=0",
+        "nomodeset",
+        "pcie_aspm=off",
+        "iommu=pt",
+        "amd_iommu=on",
+        "raid=noautodetect",
+        "cgroup_no_v1=all",
+        "rcupdate.rcu_expedited=1",
+        "skew_tick=1",
+        # RCU lazy callbacks - batches RCU work to reduce IPIs (6.4+)
+        "rcutree.enable_rcu_lazy=1",
+        # Process RCU via kthreads instead of softirq (reduces jitter with nohz_full)
+        "rcutree.use_softirq=0",
+        "rcutree.kthread_prio=50",
+        # Reduce timer overhead
+        "random.trust_cpu=on",
+        "random.trust_bootloader=on",
+        # Disable kernel memory debugging
+        "slub_debug=-",
+        "panic=1",
+        # VMs should never hibernate
+        "nohibernate",
+
+
+        # ===== Disable kernel page table isolation =====
+        "nopti",
+        "nokaslr",
+      ]
+      systemExtensions = {
+        officialExtensions = [
+          "siderolabs/crun",
+          "siderolabs/iscsi-tools",
+          "siderolabs/nfs-utils",
+          "siderolabs/nfsd",
+          "siderolabs/qemu-guest-agent",
+          "siderolabs/util-linux-tools"
+        ]
+      }
+    }
+  })
+}
+
+resource "talos_image_factory_schematic" "intel" {
+  schematic = yamlencode({
+    customization = {
+      extraKernelArgs = [
+        # ===== Disable ALL CPU vulnerability mitigations =====
+        "mitigations=off",
+        "spectre_v2=off",
+        "spec_store_bypass_disable=off",
+        "l1tf=off",
+        "mds=off",
+        "tsx_async_abort=off",
+        "mmio_stale_data=off",
+        "retbleed=off",
+        "spec_rstack_overflow=off",
+        "gather_data_sampling=off",
+        "reg_file_data_sampling=off",
+        # 6.x+ mitigations to disable
+        "spectre_bhi=off",
+        "rfds=off",
+        # Intel-specific mitigations to disable
+        "its=off",
+        # Disable split lock detection (avoids #AC perf penalty)
+        "split_lock_detect=off",
+        # Re-enable TSX on Broadwell (security off)
+        "tsx=on",
+
+        # ===== Disable security subsystems =====
+        "talos.auditd.disabled=1",
+        "init_on_alloc=0",
+        "init_on_free=0",
+        "security=none",
+        "apparmor=0",
+        "lsm=",
+        "lockdown=none",
+        "randomize_kstack_offset=off",
+
+        # ===== Memory/NUMA performance =====
+        "transparent_hugepage=always",
+        "transparent_hugepage_shmem=always",
+        "numa_balancing=enable",
+        "default_hugepagesz=2M",
+        # Multi-gen LRU (MGLRU) - better page reclaim in 6.x
+        "lru_gen=Y",
+        "lru_gen_min_ttl=0",
+        # Disable memory allocation profiling overhead (6.8+)
+        "mem_profiling=off",
+
+        # ===== Scheduler and CPU performance (Intel Xeon E5 v4 / Broadwell) =====
+        "idle=nomwait",
+        "processor.max_cstate=1",
+        "intel_idle.max_cstate=0",
+        "nohz_full=1-N",
+        "rcu_nocbs=1-N",
+        "nowatchdog",
+        "nmi_watchdog=0",
+        "tsc=reliable",
+        "clocksource=tsc",
+        "hpet=disable",
+        # Intel pstate driver
+        "intel_pstate=active",
+        "cpufreq.default_governor=performance",
+
+        # ===== Reduce kernel overhead =====
+        "audit=0",
+        "nomodeset",
+        "pcie_aspm=off",
+        "iommu=pt",
+        "intel_iommu=on",
+        "raid=noautodetect",
+        "cgroup_no_v1=all",
+        "rcupdate.rcu_expedited=1",
+        "skew_tick=1",
+        # RCU lazy callbacks - batches RCU work to reduce IPIs (6.4+)
+        "rcutree.enable_rcu_lazy=1",
+        # Process RCU via kthreads instead of softirq (reduces jitter with nohz_full)
+        "rcutree.use_softirq=0",
+        "rcutree.kthread_prio=50",
+        # Reduce timer overhead
+        "random.trust_cpu=on",
+        "random.trust_bootloader=on",
+        # Disable kernel memory debugging
+        "slub_debug=-",
+        "panic=1",
+        # VMs should never hibernate
+        "nohibernate",
+
+        # ===== Disable kernel page table isolation =====
+        "nopti",
+        "nokaslr",
       ]
       systemExtensions = {
         officialExtensions = [
@@ -33,7 +212,7 @@ locals {
     machine = {
       install = {
         disk  = "/dev/sda"
-        image = "factory.talos.dev/installer/${talos_image_factory_schematic.this.id}:v1.12.5"
+        image = "factory.talos.dev/installer/${talos_image_factory_schematic.amd.id}:v1.12.6"
       }
       kubelet = {
         image = "ghcr.io/siderolabs/kubelet:v1.35.2-fat"
@@ -49,24 +228,32 @@ locals {
         }
       }
       sysctls = {
-        "net.core.somaxconn"              = "65535"
-        "net.core.netdev_max_backlog"     = "65535"
-        "net.core.rmem_max"               = "16777216"
-        "net.core.wmem_max"               = "16777216"
-        "net.ipv4.tcp_rmem"               = "4096 87380 16777216"
-        "net.ipv4.tcp_wmem"               = "4096 65536 16777216"
-        "net.ipv4.tcp_max_syn_backlog"    = "65535"
-        "net.ipv4.tcp_tw_reuse"           = "1"
-        "net.ipv4.ip_local_port_range"    = "10240 65535"
-        "net.ipv4.tcp_fin_timeout"        = "15"
-        "net.ipv4.tcp_keepalive_time"     = "600"
-        "net.ipv4.tcp_keepalive_intvl"    = "30"
-        "net.ipv4.tcp_keepalive_probes"   = "10"
-        "net.netfilter.nf_conntrack_max"  = "1048576"
-        "fs.inotify.max_user_watches"     = "1048576"
-        "fs.inotify.max_user_instances"   = "8192"
-        "fs.file-max"                     = "2097152"
-        "vm.max_map_count"                = "262144"
+        "net.core.somaxconn"             = "65535"
+        "net.core.netdev_max_backlog"    = "65535"
+        "net.core.rmem_max"              = "16777216"
+        "net.core.wmem_max"              = "16777216"
+        "net.core.default_qdisc"         = "noqueue"
+        "net.core.busy_poll"             = "50"
+        "net.core.busy_read"             = "50"
+        "net.ipv4.tcp_rmem"              = "4096 87380 16777216"
+        "net.ipv4.tcp_wmem"              = "4096 65536 16777216"
+        "net.ipv4.tcp_max_syn_backlog"   = "65535"
+        "net.ipv4.tcp_tw_reuse"          = "1"
+        "net.ipv4.ip_local_port_range"   = "10240 65535"
+        "net.ipv4.tcp_fin_timeout"       = "15"
+        "net.ipv4.tcp_keepalive_time"    = "600"
+        "net.ipv4.tcp_keepalive_intvl"   = "30"
+        "net.ipv4.tcp_keepalive_probes"  = "10"
+        "net.ipv4.tcp_congestion_control" = "bbr"
+        "net.ipv4.tcp_fastopen"          = "3"
+        "net.netfilter.nf_conntrack_max" = "1048576"
+        "fs.inotify.max_user_watches"    = "1048576"
+        "fs.inotify.max_user_instances"  = "8192"
+        "fs.file-max"                    = "2097152"
+        "vm.max_map_count"               = "262144"
+        "vm.compaction_proactiveness"     = "0"
+        "vm.zone_reclaim_mode"           = "0"
+        "vm.page_lock_unfairness"        = "1"
       }
       network = {
         interfaces = [
@@ -91,6 +278,16 @@ locals {
       }
     }
   }
+
+  # LINDS nodes use Intel Xeon E5 v4 (Broadwell) - separate installer schematic
+  talos_common_config_linds = merge(local.talos_common_config, {
+    machine = merge(local.talos_common_config.machine, {
+      install = {
+        disk  = "/dev/sda"
+        image = "factory.talos.dev/installer/${talos_image_factory_schematic.intel.id}:v1.12.6"
+      }
+    })
+  })
 
   talos_cp_config = {
     cluster = {
@@ -159,10 +356,10 @@ locals {
     bgpControlPlane = {
       enabled = true
     }
-    routingMode    = "tunnel"
-    tunnelProtocol = "geneve"
-    tunnelPort     = 6081
-    mtu            = 1400
+    routingMode          = "tunnel"
+    tunnelProtocol       = "geneve"
+    tunnelPort           = 6081
+    mtu                  = 1400
     autoDirectNodeRoutes = false
     bpf = {
       masquerade = true
@@ -172,13 +369,13 @@ locals {
       enableTCX           = true
       lbExternalClusterIP = true
       mapDynamicSizeRatio = 0.0025
-      lbMapMax = 65536
-      ctTcpMax = 524288
-      ctAnyMax = 262144
+      lbMapMax            = 65536
+      ctTcpMax            = 524288
+      ctAnyMax            = 262144
     }
-    enableIPv4BIGTCP = true
+    enableIPv4BIGTCP     = true
     enableIPv4Masquerade = true
-    enableTunnelBIGTCP = true
+    enableTunnelBIGTCP   = true
     endpointRoutes = {
       enabled = false
     }
@@ -256,7 +453,7 @@ resource "talos_machine_configuration_apply" "worker_linds" {
     proxmox_virtual_environment_vm.talos_worker_linds
   ]
   config_patches = [
-    yamlencode(local.talos_common_config)
+    yamlencode(local.talos_common_config_linds)
   ]
 }
 
@@ -277,11 +474,11 @@ resource "talos_cluster_kubeconfig" "this" {
 }
 
 resource "helm_release" "cilium" {
-  name             = "cilium"
-  repository       = "https://helm.cilium.io/"
-  chart            = "cilium"
-  namespace        = "kube-system"
-  version          = "1.19.1"
+  name       = "cilium"
+  repository = "https://helm.cilium.io/"
+  chart      = "cilium"
+  namespace  = "kube-system"
+  version    = "1.19.1"
 
   values = [
     yamlencode(local.cilium_values)
@@ -301,13 +498,13 @@ resource "null_resource" "cilium_bgp_config" {
 
   triggers = {
     bgp_config_hash = sha256(jsonencode({
-      jd_asn             = 64512
-      linds_asn          = 64513
-      jd_peer            = "10.0.53.1"
-      linds_peer         = "10.3.1.1"
-      lb_cidr            = "172.16.1.0/24"
-      lb_pool_advertise  = true
-      config_version     = 2
+      jd_asn            = 64512
+      linds_asn         = 64513
+      jd_peer           = "10.0.53.1"
+      linds_peer        = "10.3.1.1"
+      lb_cidr           = "172.16.1.0/24"
+      lb_pool_advertise = true
+      config_version    = 2
     }))
   }
 
