@@ -356,6 +356,9 @@ locals {
     bgpControlPlane = {
       enabled = true
     }
+    envoy = {
+      enabled = false
+    }
     routingMode          = "tunnel"
     tunnelProtocol       = "geneve"
     tunnelPort           = 6081
@@ -478,7 +481,7 @@ resource "helm_release" "cilium" {
   repository = "https://helm.cilium.io/"
   chart      = "cilium"
   namespace  = "kube-system"
-  version    = "1.19.1"
+  version    = "1.19.2"
 
   values = [
     yamlencode(local.cilium_values)
