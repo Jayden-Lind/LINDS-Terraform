@@ -276,6 +276,9 @@ locals {
           name = "none"
         }
       }
+      proxy = {
+        disabled = true
+      }
     }
   }
 
