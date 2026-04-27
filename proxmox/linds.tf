@@ -50,9 +50,9 @@ resource "proxmox_virtual_environment_vm" "linds-plex-02" {
   }
 }
 
-resource "proxmox_virtual_environment_vm" "linds-torrent-01" {
+resource "proxmox_virtual_environment_vm" "linds-torrent-02" {
   provider = proxmox.linds
-  name     = "LINDS-Torrent-01"
+  name     = "LINDS-Torrent-02"
 
   node_name = var.hostname_linds
 
@@ -80,7 +80,22 @@ resource "proxmox_virtual_environment_vm" "linds-torrent-01" {
   machine = "q35"
 
   clone {
-    vm_id = 109
+    vm_id = 151
+  }
+
+  initialization {
+    ip_config {
+      ipv4 {
+        address = "10.0.36.2/24"
+        gateway = "10.0.36.1"
+      }
+    }
+  }
+
+  startup {
+    order      = "10"
+    up_delay   = "60"
+    down_delay = "60"
   }
 
   network_device {
