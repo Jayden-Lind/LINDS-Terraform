@@ -212,10 +212,10 @@ locals {
     machine = {
       install = {
         disk  = "/dev/sda"
-        image = "factory.talos.dev/installer/${talos_image_factory_schematic.amd.id}:v1.12.6"
+        image = "factory.talos.dev/installer/${talos_image_factory_schematic.amd.id}:v1.13.0"
       }
       kubelet = {
-        image = "ghcr.io/siderolabs/kubelet:v1.35.2-fat"
+        image = "ghcr.io/siderolabs/kubelet:v1.36.0-fat"
       }
       features = {
         hostDNS = {
@@ -287,7 +287,7 @@ locals {
     machine = merge(local.talos_common_config.machine, {
       install = {
         disk  = "/dev/sda"
-        image = "factory.talos.dev/installer/${talos_image_factory_schematic.intel.id}:v1.12.6"
+        image = "factory.talos.dev/installer/${talos_image_factory_schematic.intel.id}:v1.13.0"
       }
     })
   })
