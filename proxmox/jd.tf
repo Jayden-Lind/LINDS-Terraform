@@ -65,6 +65,7 @@ resource "proxmox_virtual_environment_vm" "jd-torrent" {
     bridge  = "vmbr0"
     model   = "virtio"
     vlan_id = "0"
+    queues = 8
   }
 
   operating_system {
@@ -137,6 +138,7 @@ resource "proxmox_virtual_environment_vm" "talos_cp" {
     model       = "virtio"
     vlan_id     = "53"
     mac_address = "BC:24:11:D4:F3:C1"
+    queues = 8
   }
 
   operating_system {
@@ -218,7 +220,7 @@ resource "proxmox_virtual_environment_vm" "talos_worker" {
     model       = "virtio"
     vlan_id     = "53"
     mac_address = local.talos_worker_mac_addresses[count.index]
-
+    queues = 8
   }
 
   operating_system {

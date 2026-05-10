@@ -181,7 +181,7 @@ resource "proxmox_virtual_environment_vm" "talos_worker_linds" {
     model       = "virtio"
     vlan_id     = "300"
     mac_address = local.linds_talos_worker_mac_addresses[count.index]
-
+    queues = 4
   }
 
   operating_system {
