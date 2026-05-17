@@ -379,9 +379,9 @@ locals {
       ctTcpMax            = 524288
       ctAnyMax            = 262144
     }
-    enableIPv4BIGTCP     = true
+    enableIPv4BIGTCP     = false
     enableIPv4Masquerade = true
-    enableTunnelBIGTCP   = true
+    enableTunnelBIGTCP   = false
     endpointRoutes = {
       enabled = false
     }
@@ -394,6 +394,33 @@ locals {
 
 
     bpfClockProbe = true
+
+    prometheus = {
+      enabled = true
+      serviceMonitor = {
+        enabled = true
+      }
+    }
+
+    operator = {
+      prometheus = {
+        enabled = true
+        serviceMonitor = {
+          enabled = true
+        }
+      }
+    }
+
+    hubble = {
+      enabled = true
+      metrics = {
+        enableOpenMetrics = true
+        enabled           = ["dns", "drop", "tcp", "flow", "port-distribution", "icmp", "httpV2"]
+        serviceMonitor = {
+          enabled = true
+        }
+      }
+    }
   }
 }
 
@@ -484,7 +511,7 @@ resource "helm_release" "cilium" {
   repository = "https://helm.cilium.io/"
   chart      = "cilium"
   namespace  = "kube-system"
-  version    = "1.19.2"
+  version    = "1.19.4"
 
   values = [
     yamlencode(local.cilium_values)

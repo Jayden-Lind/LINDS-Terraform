@@ -12,3 +12,4 @@ packer_*.pkrvars.hcl
 proxmox/talosconfig
 proxmox/kubeconfig
 backend.conf
+/.idea/
