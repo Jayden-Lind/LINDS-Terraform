@@ -2,7 +2,7 @@ terraform {
   backend "s3" {
     bucket = "tfstate"
     endpoints = {
-      s3 = "http://jd-truenas-01.linds.com.au:9000"
+      s3 = "http://jd-s3-01.linds.com.au:9000"
     }
     key = "linds.tfstate"
 
