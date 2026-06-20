@@ -131,6 +131,67 @@ $ terraform plan -var-file proxmox_linds_terraform.tfvars
 
 
 ### Talos
-terraform destroy -var-file=proxmox_jd_terraform.tfvars -target=proxmox_virtual_environment_vm.talos_cp -target=proxmox_virtual_environment_vm.talos_worker
 
-run it twice, reboot nodes after second run
+#### Upgrading the Talos machine image on running nodes
+
+Talos OS upgrades are performed in-place via `talosctl upgrade`. The installer image URL is composed of a schematic ID (from Terraform state) and the target Talos version.
+
+**Step 1 — Get the schematic IDs from Terraform state**
+
+```shell
+cd proxmox/
+# AMD schematic (JD nodes — EPYC 7B13 / Zen 3)
+terraform state show talos_image_factory_schematic.amd | grep "id "
+
+# Intel schematic (LINDS nodes — Xeon E5 v4 / Broadwell)
+terraform state show talos_image_factory_schematic.intel | grep "id "
+```
+
+**Step 2 — Upgrade worker nodes first, control plane last**
+
+Replace `<TALOS_VERSION>` with the target version (e.g. `v1.13.4`) and use the schematic IDs from Step 1.
+
+JD workers (AMD — 10.0.53.201, 10.0.53.202, 10.0.53.203):
+```shell
+export TALOSCONFIG=proxmox/talosconfig
+AMD_SCHEMATIC=$(terraform -chdir=proxmox state show talos_image_factory_schematic.amd | awk '/id / {print $3}' | tr -d '"')
+TALOS_VERSION=v1.13.4
+
+for node in 10.0.53.201 10.0.53.202 10.0.53.203; do
+  talosctl upgrade --nodes $node \
+    --image factory.talos.dev/installer/${AMD_SCHEMATIC}:${TALOS_VERSION} \
+    --wait
+done
+```
+
+LINDS workers (Intel — 10.3.1.100, 10.3.1.101):
+```shell
+INTEL_SCHEMATIC=$(terraform -chdir=proxmox state show talos_image_factory_schematic.intel | awk '/id =/ {print $3}' | tr -d '"')
+
+for node in 10.3.1.100 10.3.1.101; do
+  talosctl upgrade --nodes $node \
+    --image factory.talos.dev/installer/${INTEL_SCHEMATIC}:${TALOS_VERSION} \
+    --wait
+done
+```
+
+JD control plane (AMD — 10.0.53.200, upgrade last):
+```shell
+talosctl upgrade --nodes 10.0.53.200 \
+  --image factory.talos.dev/installer/${AMD_SCHEMATIC}:${TALOS_VERSION} \
+  --wait
+```
+
+**Step 3 — Verify all nodes**
+
+```shell
+talosctl version --nodes 10.0.53.200,10.0.53.201,10.0.53.202,10.0.53.203,10.3.1.100,10.3.1.101
+```
+
+#### Destroying Talos VMs
+
+```shell
+terraform destroy -var-file=proxmox_jd_terraform.tfvars -target=proxmox_virtual_environment_vm.talos_cp -target=proxmox_virtual_environment_vm.talos_worker
+```
+
+Run it twice, reboot nodes after second run.
