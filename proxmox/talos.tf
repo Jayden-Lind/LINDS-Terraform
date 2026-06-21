@@ -7,20 +7,6 @@ resource "talos_image_factory_schematic" "amd" {
       extraKernelArgs = [
         # ===== Disable ALL CPU vulnerability mitigations =====
         "mitigations=off",
-        "spectre_v2=off",
-        "spec_store_bypass_disable=off",
-        "l1tf=off",
-        "mds=off",
-        "tsx_async_abort=off",
-        "mmio_stale_data=off",
-        "retbleed=off",
-        "spec_rstack_overflow=off",
-        "gather_data_sampling=off",
-        "reg_file_data_sampling=off",
-        # 6.x+ mitigations to disable
-        "spectre_bhi=off",
-        "srso=off",
-        "rfds=off",
         # Disable split lock detection (avoids #AC perf penalty)
         "split_lock_detect=off",
 
@@ -35,21 +21,17 @@ resource "talos_image_factory_schematic" "amd" {
         "randomize_kstack_offset=off",
 
         # ===== Memory/NUMA performance =====
-        "transparent_hugepage=always",
-        "transparent_hugepage_shmem=always",
-        "numa_balancing=enable",
+        "transparent_hugepage=madvise",
+        "transparent_hugepage_shmem=advise",
         "default_hugepagesz=2M",
         # Multi-gen LRU (MGLRU) - better page reclaim in 6.x
         "lru_gen=Y",
-        "lru_gen_min_ttl=0",
         # Disable memory allocation profiling overhead (6.8+)
         "mem_profiling=off",
 
         # ===== Scheduler and CPU performance (AMD EPYC 7B13 / Zen 3) =====
         "idle=nomwait",
         "processor.max_cstate=1",
-        "nohz_full=1-N",
-        "rcu_nocbs=1-N",
         "nowatchdog",
         "nmi_watchdog=0",
         "tsc=reliable",
@@ -63,7 +45,6 @@ resource "talos_image_factory_schematic" "amd" {
         # ===== Reduce kernel overhead =====
         "audit=0",
         "nomodeset",
-        "pcie_aspm=off",
         "iommu=pt",
         "amd_iommu=on",
         "raid=noautodetect",
@@ -72,9 +53,6 @@ resource "talos_image_factory_schematic" "amd" {
         "skew_tick=1",
         # RCU lazy callbacks - batches RCU work to reduce IPIs (6.4+)
         "rcutree.enable_rcu_lazy=1",
-        # Process RCU via kthreads instead of softirq (reduces jitter with nohz_full)
-        "rcutree.use_softirq=0",
-        "rcutree.kthread_prio=50",
         # Reduce timer overhead
         "random.trust_cpu=on",
         "random.trust_bootloader=on",
@@ -87,7 +65,6 @@ resource "talos_image_factory_schematic" "amd" {
 
         # ===== Disable kernel page table isolation =====
         "nopti",
-        "nokaslr",
       ]
       systemExtensions = {
         officialExtensions = [
@@ -109,21 +86,6 @@ resource "talos_image_factory_schematic" "intel" {
       extraKernelArgs = [
         # ===== Disable ALL CPU vulnerability mitigations =====
         "mitigations=off",
-        "spectre_v2=off",
-        "spec_store_bypass_disable=off",
-        "l1tf=off",
-        "mds=off",
-        "tsx_async_abort=off",
-        "mmio_stale_data=off",
-        "retbleed=off",
-        "spec_rstack_overflow=off",
-        "gather_data_sampling=off",
-        "reg_file_data_sampling=off",
-        # 6.x+ mitigations to disable
-        "spectre_bhi=off",
-        "rfds=off",
-        # Intel-specific mitigations to disable
-        "its=off",
         # Disable split lock detection (avoids #AC perf penalty)
         "split_lock_detect=off",
         # Re-enable TSX on Broadwell (security off)
@@ -140,13 +102,11 @@ resource "talos_image_factory_schematic" "intel" {
         "randomize_kstack_offset=off",
 
         # ===== Memory/NUMA performance =====
-        "transparent_hugepage=always",
-        "transparent_hugepage_shmem=always",
-        "numa_balancing=enable",
+        "transparent_hugepage=madvise",
+        "transparent_hugepage_shmem=advise",
         "default_hugepagesz=2M",
         # Multi-gen LRU (MGLRU) - better page reclaim in 6.x
         "lru_gen=Y",
-        "lru_gen_min_ttl=0",
         # Disable memory allocation profiling overhead (6.8+)
         "mem_profiling=off",
 
@@ -154,8 +114,6 @@ resource "talos_image_factory_schematic" "intel" {
         "idle=nomwait",
         "processor.max_cstate=1",
         "intel_idle.max_cstate=0",
-        "nohz_full=1-N",
-        "rcu_nocbs=1-N",
         "nowatchdog",
         "nmi_watchdog=0",
         "tsc=reliable",
@@ -168,7 +126,6 @@ resource "talos_image_factory_schematic" "intel" {
         # ===== Reduce kernel overhead =====
         "audit=0",
         "nomodeset",
-        "pcie_aspm=off",
         "iommu=pt",
         "intel_iommu=on",
         "raid=noautodetect",
@@ -177,9 +134,6 @@ resource "talos_image_factory_schematic" "intel" {
         "skew_tick=1",
         # RCU lazy callbacks - batches RCU work to reduce IPIs (6.4+)
         "rcutree.enable_rcu_lazy=1",
-        # Process RCU via kthreads instead of softirq (reduces jitter with nohz_full)
-        "rcutree.use_softirq=0",
-        "rcutree.kthread_prio=50",
         # Reduce timer overhead
         "random.trust_cpu=on",
         "random.trust_bootloader=on",
@@ -191,7 +145,6 @@ resource "talos_image_factory_schematic" "intel" {
 
         # ===== Disable kernel page table isolation =====
         "nopti",
-        "nokaslr",
       ]
       systemExtensions = {
         officialExtensions = [
@@ -228,32 +181,32 @@ locals {
         }
       }
       sysctls = {
-        "net.core.somaxconn"             = "65535"
-        "net.core.netdev_max_backlog"    = "65535"
-        "net.core.rmem_max"              = "16777216"
-        "net.core.wmem_max"              = "16777216"
-        "net.core.default_qdisc"         = "noqueue"
-        "net.core.busy_poll"             = "50"
-        "net.core.busy_read"             = "50"
-        "net.ipv4.tcp_rmem"              = "4096 87380 16777216"
-        "net.ipv4.tcp_wmem"              = "4096 65536 16777216"
-        "net.ipv4.tcp_max_syn_backlog"   = "65535"
-        "net.ipv4.tcp_tw_reuse"          = "1"
-        "net.ipv4.ip_local_port_range"   = "10240 65535"
-        "net.ipv4.tcp_fin_timeout"       = "15"
-        "net.ipv4.tcp_keepalive_time"    = "600"
-        "net.ipv4.tcp_keepalive_intvl"   = "30"
-        "net.ipv4.tcp_keepalive_probes"  = "10"
+        "net.core.somaxconn"              = "65535"
+        "net.core.netdev_max_backlog"     = "65535"
+        "net.core.rmem_max"               = "16777216"
+        "net.core.wmem_max"               = "16777216"
+        "net.core.default_qdisc"          = "noqueue"
+        "net.core.busy_poll"              = "50"
+        "net.core.busy_read"              = "50"
+        "net.ipv4.tcp_rmem"               = "4096 87380 16777216"
+        "net.ipv4.tcp_wmem"               = "4096 65536 16777216"
+        "net.ipv4.tcp_max_syn_backlog"    = "65535"
+        "net.ipv4.tcp_tw_reuse"           = "1"
+        "net.ipv4.ip_local_port_range"    = "10240 65535"
+        "net.ipv4.tcp_fin_timeout"        = "15"
+        "net.ipv4.tcp_keepalive_time"     = "600"
+        "net.ipv4.tcp_keepalive_intvl"    = "30"
+        "net.ipv4.tcp_keepalive_probes"   = "10"
         "net.ipv4.tcp_congestion_control" = "bbr"
-        "net.ipv4.tcp_fastopen"          = "3"
-        "net.netfilter.nf_conntrack_max" = "1048576"
-        "fs.inotify.max_user_watches"    = "1048576"
-        "fs.inotify.max_user_instances"  = "8192"
-        "fs.file-max"                    = "2097152"
-        "vm.max_map_count"               = "262144"
+        "net.ipv4.tcp_fastopen"           = "3"
+        "net.netfilter.nf_conntrack_max"  = "1048576"
+        "fs.inotify.max_user_watches"     = "1048576"
+        "fs.inotify.max_user_instances"   = "8192"
+        "fs.file-max"                     = "2097152"
+        "vm.max_map_count"                = "262144"
         "vm.compaction_proactiveness"     = "0"
-        "vm.zone_reclaim_mode"           = "0"
-        "vm.page_lock_unfairness"        = "1"
+        "vm.zone_reclaim_mode"            = "0"
+        "vm.page_lock_unfairness"         = "1"
       }
       network = {
         interfaces = [
@@ -337,6 +290,10 @@ locals {
     pmtuDiscovery = {
       enabled = true
     }
+    bandwidthManager = {
+      enabled = true
+      bbr     = true
+    }
     k8sServiceHost = "localhost"
     k8sServicePort = 7445
     securityContext = {
@@ -374,10 +331,6 @@ locals {
       }
       enableTCX           = true
       lbExternalClusterIP = true
-      mapDynamicSizeRatio = 0.0025
-      lbMapMax            = 65536
-      ctTcpMax            = 524288
-      ctAnyMax            = 262144
     }
     enableIPv4BIGTCP     = false
     enableIPv4Masquerade = true
@@ -418,6 +371,26 @@ locals {
         enabled           = ["dns", "drop", "tcp", "flow", "port-distribution", "icmp", "httpV2"]
         serviceMonitor = {
           enabled = true
+        }
+      }
+      relay = {
+        enabled = true
+      }
+      ui = {
+        enabled = true
+        ingress = {
+          enabled   = true
+          className = "nginx"
+          annotations = {
+            "cert-manager.io/cluster-issuer" = "linds-ca"
+          }
+          hosts = ["hubble.linds.com.au"]
+          tls = [
+            {
+              secretName = "hubble-linds-tls"
+              hosts      = ["hubble.linds.com.au"]
+            }
+          ]
         }
       }
     }
@@ -511,7 +484,7 @@ resource "helm_release" "cilium" {
   repository = "https://helm.cilium.io/"
   chart      = "cilium"
   namespace  = "kube-system"
-  version    = "1.19.4"
+  version    = "1.19.5"
 
   values = [
     yamlencode(local.cilium_values)
