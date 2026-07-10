@@ -264,6 +264,16 @@ resource "proxmox_virtual_environment_network_linux_bridge" "LAN_Interface" {
   ]
 }
 
+# Storage leg on VLAN 53: gives the host an L2-direct path to the talos nodes
+# so NFS/iSCSI no longer hairpins through the VyOS router VM. Point
+# jd-truenas-01.linds.com.au DNS and the democratic-csi targetPortal at this IP.
+resource "proxmox_virtual_environment_network_linux_vlan" "storage_vlan53" {
+  node_name = var.hostname
+  name      = "vmbr0.53"
+  address   = "10.0.53.246/24"
+  comment   = "k8s storage - direct L2 to VLAN 53"
+}
+
 resource "proxmox_virtual_environment_network_linux_bridge" "WAN_Interface" {
 
   node_name = var.hostname

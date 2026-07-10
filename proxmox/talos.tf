@@ -319,11 +319,16 @@ locals {
     envoy = {
       enabled = false
     }
-    routingMode          = "tunnel"
-    tunnelProtocol       = "geneve"
-    tunnelPort           = 6081
-    MTU                  = 1300
-    autoDirectNodeRoutes = false
+    # Native routing: PodCIDRs are BGP-advertised to both VyOS routers, so no
+    # encapsulation is needed. Geneve-in-IPsec was dropped by the router (GRO
+    # merges tunneled TCP into GSO packets the vti/xfrm path cannot segment),
+    # and native pod TCP gets MSS-clamped by vti0 clamp-mss-to-pmtu.
+    routingMode                  = "native"
+    ipv4NativeRoutingCIDR        = "10.244.0.0/16"
+    autoDirectNodeRoutes         = true
+    # Nodes span two L2 segments (10.0.53.0/24 and 10.3.1.0/24); skip direct
+    # routes for the remote site and fall back to the default gateway.
+    directRoutingSkipUnreachable = true
     bpf = {
       masquerade = true
       distributedLRU = {
@@ -334,7 +339,6 @@ locals {
     }
     enableIPv4BIGTCP     = false
     enableIPv4Masquerade = true
-    enableTunnelBIGTCP   = false
     endpointRoutes = {
       enabled = false
     }
