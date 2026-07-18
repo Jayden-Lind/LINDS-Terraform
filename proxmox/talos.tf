@@ -170,10 +170,18 @@ locals {
       kubelet = {
         image = "ghcr.io/siderolabs/kubelet:v1.36.1-fat"
       }
+      # Declarative replacement for the old node_labels local-exec hack.
+      # LINDS workers override this to datacenter=linds below.
+      nodeLabels = {
+        datacenter = "jd"
+      }
       features = {
         hostDNS = {
-          enabled              = true
-          forwardKubeDNSToHost = true
+          enabled = true
+          # CoreDNS forwards straight to the upstream DNS servers now
+          # (base/coredns.yml in LINDS-Kubernetes): the 169.254.116.108
+          # hostDNS hop dropped queries under Cilium socketLB.
+          forwardKubeDNSToHost = false
         }
         kubePrism = {
           enabled = true
@@ -232,6 +240,11 @@ locals {
       proxy = {
         disabled = true
       }
+      # No KubeSpan and a single cluster: the public discovery service is
+      # unused and was just logging "discovery.talos.dev unreachable" noise.
+      discovery = {
+        enabled = false
+      }
     }
   }
 
@@ -241,6 +254,9 @@ locals {
       install = {
         disk  = "/dev/sda"
         image = "factory.talos.dev/installer/${talos_image_factory_schematic.intel.id}:v1.13.4"
+      }
+      nodeLabels = {
+        datacenter = "linds"
       }
     })
   })
@@ -502,8 +518,7 @@ resource "helm_release" "cilium" {
 # Apply Cilium BGP configuration via kubectl to avoid CRD race condition
 resource "null_resource" "cilium_bgp_config" {
   depends_on = [
-    helm_release.cilium,
-    null_resource.node_labels
+    helm_release.cilium
   ]
 
   triggers = {
@@ -696,36 +711,5 @@ output "kubeconfig" {
   sensitive = true
 }
 
-resource "null_resource" "node_labels" {
-  depends_on = [
-    talos_cluster_kubeconfig.this,
-    talos_machine_configuration_apply.controlplane,
-    talos_machine_configuration_apply.worker,
-    talos_machine_configuration_apply.worker_linds
-  ]
-
-  triggers = {
-    always_run = "${timestamp()}"
-  }
-
-  provisioner "local-exec" {
-    command     = <<EOT
-      export KUBECONFIG=${path.module}/kubeconfig
-
-      # Label JD Control Plane and Workers
-      NODES_JD=$(kubectl get nodes --no-headers -o custom-columns=":metadata.name" | grep -E "^talos-cp|^talos-worker" || true)
-      for node in $NODES_JD; do
-        [ -z "$node" ] && continue
-        kubectl label nodes $node datacenter=jd --overwrite
-      done
-
-      # Label Linds Workers
-      NODES_LINDS=$(kubectl get nodes --no-headers -o custom-columns=":metadata.name" | grep "^talos-linds-worker" || true)
-      for node in $NODES_LINDS; do
-        [ -z "$node" ] && continue
-        kubectl label nodes $node datacenter=linds --overwrite
-      done
-    EOT
-    interpreter = ["/bin/bash", "-c"]
-  }
-}
+# Node labels are now set declaratively via machine.nodeLabels in the Talos
+# machine config (talos_common_config / talos_common_config_linds above).
