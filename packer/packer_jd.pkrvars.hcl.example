@@ -1,0 +1,13 @@
+# Copy to packer_jd.pkrvars.hcl (gitignored) and fill in.
+# Anything sensitive is better passed as PKR_VAR_proxmox_password / PKR_VAR_ssh_password.
+
+proxmox_node         = "jd-proxmox-02"
+proxmox_url          = "https://10.0.50.246:8006/api2/json"
+proxmox_storage_pool = "local-lvm"
+disk_format          = "raw"
+
+proxmox_username = "root@pam"
+proxmox_password = "xxxxxxxx"
+
+ssh_username = "jayden"
+ssh_password = "xxxxxxxx"

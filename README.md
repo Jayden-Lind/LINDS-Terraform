@@ -2,196 +2,139 @@
 
 ![terraform](img/tf.png)
 
-## Intro
+Infrastructure for a two-site homelab: a Proxmox host at each site, a Talos
+Kubernetes cluster spanning both, and the storage underneath it.
 
-Uses [vSphere terraform provider](https://registry.terraform.io/providers/hashicorp/vsphere/2.2.0) to provision VM's, Host Port Groups, Datastore.
+| Directory | What it manages |
+| --- | --- |
+| [`proxmox/`](proxmox/) | `jd-proxmox-02` end to end (guests, networking, storage, ZFS/NFS) plus the LINDS guests and the Talos/Cilium cluster |
+| [`bootstrap/`](bootstrap/) | The MinIO container that serves the S3 state backend. Separate root module with local state — see below |
+| [`packer/`](packer/) | The Ubuntu LTS template every cloned guest comes from |
+| [`ESXi/`](ESXi/) | Legacy vSphere config, kept for reference; not in active use |
 
-For Proxmox I use [bpg/proxmox](https://registry.terraform.io/providers/bpg/proxmox/latest)
+## Sites
 
-[Packer](https://www.packer.io/) to create the VM template of CentOS images, which is then cloned per ESXi host and Proxmox host.
+**JD** — `jd-proxmox-02` (10.0.50.246). AMD EPYC 7B13, 251 GiB RAM, three ZFS
+pools. Runs the control plane, three Talos workers, the VyOS router, a Windows
+DC and assorted guests.
+
+**LINDS** — `linds-proxmox-01` (192.168.6.205). Intel Xeon E5 v4. Two Talos
+workers plus Plex and a torrent box. Joined to JD over an IPsec tunnel between
+the two VyOS routers.
+
+Cilium runs in native routing mode and BGP-peers with each site's VyOS router
+(ASN 64512 at JD, 64513 at LINDS) to advertise PodCIDRs and the LoadBalancer
+pool.
+
+## State, and the chicken-and-egg problem
+
+`proxmox/` keeps its state in a MinIO bucket. MinIO runs as LXC 106 on
+`jd-proxmox-02` — the host `proxmox/` manages. Managing that container from the
+same module would make a cold start impossible and let a replace eat its own
+state mid-apply.
+
+So the container lives in [`bootstrap/`](bootstrap/), a separate root module
+with **local** state, marked `prevent_destroy`, with an `import` block that
+re-adopts the running container if the state file is ever lost. Read
+[`bootstrap/README.md`](bootstrap/README.md) before touching it.
 
 ## Packer
 
-### Vsphere
-
-1. Change to packer directory
+One build, the current Ubuntu LTS, from a downloaded ISO.
 
 ```shell
-$ cd packer/
+cd packer/
+cp packer_jd.pkrvars.hcl.example packer_jd.pkrvars.hcl   # then fill it in
+packer init .
+packer build -var-file=packer_jd.pkrvars.hcl .
 ```
 
-2. Fill in `packer/vars.auto.pkrvars.hcl.example` and rename it to `packer/vars.auto.pkrvars.hcl`.
+Bumping to the next LTS is `ubuntu_version` + `iso_url` + `iso_checksum` in
+`variables.pkr.hcl`. Checksums come from
+`https://releases.ubuntu.com/<version>/SHA256SUMS`.
 
-Example:
-```
-vsphere_server   = "jd-vsca-01.linds.com.au"
-vsphere_user     = "administrator@vsphere.local"
-vsphere_password = "xxxxxxxxxx"
-datacenter       = "LINDS"
-datastore        = "JD-Datastore-OS"
-network_name     = "Native VLAN"
-host             = "jd-esxi-01.linds.com.au"
-ssh_password     = "xxxxxxxxxx"
-```
+The template VMID (`template_vm_id`, default 150) must match
+`ubuntu_template_vm_id` in `proxmox/locals.tf` — that is what cloned guests
+reference.
 
-3. In the designated datastore, copy [CentOS 9 Stream ISO](https://mirrors.centos.org/mirrorlist?path=/9-stream/BaseOS/x86_64/iso/CentOS-Stream-9-latest-x86_64-dvd1.iso&redirect=1&protocol=https) to `<datastore>/ISO/CentOS-Stream-9.iso` and [CentOS 8 Stream ISO](http://isoredirect.centos.org/centos/8-stream/isos/x86_64/) to `<datastore>/ISO/CentOS-Stream-8.iso`
-
-4. Run the below command to build and provision both CentOS 9 and CentOS 8.
-
-```shell
-$ cd packer/
-$ packer build -force .
-```
-
-**To build only CentOS 8:**
-
-```shell
-$ packer build -var-file=vars.auto.pkrvars.hcl -only=vsphere-iso.centos8 -force .
-```
-
-**To build only CentOS 9:**
-
-```shell
-$ packer build -var-file=vars.auto.pkrvars.hcl -only=vsphere-iso.centos9 -force .
-```
-
-### Proxmox
-
-
-**To build CentOS 9 on proxmox**
-
-1. Copy and rename variables-proxmox.pkrvars.hcl.example to variables-proxmox.pkrvars.hcl and fill in variables
-
-2. Run the below command
-```shell
-cd packer && packer build -var-file=packer_jd.pkrvars.hcl -only=proxmox-iso.centos-9 -force . 
-```
-
-**To build Ubuntu Server 2024 on proxmox**
-
-1. Run the below command
-```shell
-cd packer && packer build -var-file=packer_jd.pkrvars.hcl -only=proxmox-iso.ubuntu -force .
-```
+Secrets are better passed as `PKR_VAR_proxmox_password` / `PKR_VAR_ssh_password`
+than written into the vars file.
 
 ## Terraform
 
-### vSphere
+```shell
+cd proxmox/
+cp terraform.tfvars.example terraform.tfvars     # then fill it in
+cp backend.conf.example backend.conf             # MinIO credentials
 
-1. Copy and rename [terraform.tfvars.example](/terraform.tfvars.example)
-
-Example:
-```
-vsphere_server      = "xxxx"
-vsphere_user        = "xxxx"
-vsphere_password    = "xxxx"
-datacenter          = "xxxx"
-jd-datastore        = "xxxx"
-jd-host             = "xxxx"
-linds-host          = "xxxx"
-linds-datastore     = "xxxx"
-jd_network_name     = "xxxxxxx"
-jd_centos_9         = "CentOS 9"
-jd_centos_8         = "CentOS 8"
-linds_centos_9      = "CentOS 9-LINDS"
-linds_centos_8      = "CentOS 8-LINDS"
-host_licensekey     = "xxxxx-xxxxx-xxxxx-xxxxx-xxxxx"
+terraform init -backend-config=backend.conf
+terraform plan
 ```
 
-2. Initialise Terraform and apply configuration
+Both sites are configured in the one module via a second aliased provider;
+there is no per-site var file.
+
+Prefer an API token over the root password:
 
 ```shell
-$ terraform init
-
-$ terraform plan
-
-$ terraform apply
-```
-#### State
-
-State is kept on TrueNAS NFS share, that is then rsync'd to secondary TrueNAS offsite. This can be seen in [versions.tf](/versions.tf).
-
-### Proxmox
-
-1. Switch to proxmox directory
-
-`cd proxmox/`
-
-2. Copy and rename [terraform.tfvars.example](/proxmox/terraform.tfvars.example)
-
-3. Copy and rename [backend.conf.example](/proxmox/backend.conf.example) to `backend.conf` and fill in your MinIO/S3 credentials.
-
-4. Initialise Terraform and apply configuration
-
-```shell
-$ terraform init -backend-config=backend.conf
-$ terraform plan -var-file proxmox_jd_terraform.tfvars
-$ terraform plan -var-file proxmox_linds_terraform.tfvars
+pveum user token add root@pam terraform --privsep 0
 ```
 
+then set `proxmox_api_token = "root@pam!terraform=<uuid>"`.
 
-### Talos
+See [`proxmox/README.md`](proxmox/README.md) for the file layout and the
+sharp edges.
 
-#### Upgrading the Talos machine image on running nodes
+## Talos
 
-Talos OS upgrades are performed in-place via `talosctl upgrade`. The installer image URL is composed of a schematic ID (from Terraform state) and the target Talos version.
+### Upgrading the machine image on running nodes
 
-**Step 1 — Get the schematic IDs from Terraform state**
+Talos upgrades are in-place via `talosctl upgrade`. The installer image is a
+schematic ID plus a version; both come from Terraform.
 
 ```shell
 cd proxmox/
-# AMD schematic (JD nodes — EPYC 7B13 / Zen 3)
-terraform state show talos_image_factory_schematic.amd | grep "id "
-
-# Intel schematic (LINDS nodes — Xeon E5 v4 / Broadwell)
-terraform state show talos_image_factory_schematic.intel | grep "id "
+terraform output -json talos_installer_images
 ```
 
-**Step 2 — Upgrade worker nodes first, control plane last**
+That prints the exact image reference per CPU vendor — `amd` for the JD nodes
+(EPYC 7B13 / Zen 3), `intel` for the LINDS nodes (Xeon E5 v4 / Broadwell).
 
-Replace `<TALOS_VERSION>` with the target version (e.g. `v1.13.4`) and use the schematic IDs from Step 1.
+Workers first, control plane last:
 
-JD workers (AMD — 10.0.53.201, 10.0.53.202, 10.0.53.203):
 ```shell
 export TALOSCONFIG=proxmox/talosconfig
-AMD_SCHEMATIC=$(terraform -chdir=proxmox state show talos_image_factory_schematic.amd | awk '/id / {print $3}' | tr -d '"')
-TALOS_VERSION=v1.13.4
+AMD=$(terraform -chdir=proxmox output -json talos_installer_images | jq -r .amd)
+INTEL=$(terraform -chdir=proxmox output -json talos_installer_images | jq -r .intel)
 
 for node in 10.0.53.201 10.0.53.202 10.0.53.203; do
-  talosctl upgrade --nodes $node \
-    --image factory.talos.dev/installer/${AMD_SCHEMATIC}:${TALOS_VERSION} \
-    --wait
+  talosctl upgrade --nodes $node --image "$AMD" --wait
 done
-```
-
-LINDS workers (Intel — 10.3.1.100, 10.3.1.101):
-```shell
-INTEL_SCHEMATIC=$(terraform -chdir=proxmox state show talos_image_factory_schematic.intel | awk '/id =/ {print $3}' | tr -d '"')
 
 for node in 10.3.1.100 10.3.1.101; do
-  talosctl upgrade --nodes $node \
-    --image factory.talos.dev/installer/${INTEL_SCHEMATIC}:${TALOS_VERSION} \
-    --wait
+  talosctl upgrade --nodes $node --image "$INTEL" --wait
 done
+
+talosctl upgrade --nodes 10.0.53.200 --image "$AMD" --wait
 ```
 
-JD control plane (AMD — 10.0.53.200, upgrade last):
-```shell
-talosctl upgrade --nodes 10.0.53.200 \
-  --image factory.talos.dev/installer/${AMD_SCHEMATIC}:${TALOS_VERSION} \
-  --wait
-```
-
-**Step 3 — Verify all nodes**
+Verify:
 
 ```shell
 talosctl version --nodes 10.0.53.200,10.0.53.201,10.0.53.202,10.0.53.203,10.3.1.100,10.3.1.101
 ```
 
-#### Destroying Talos VMs
+To move to a new Talos release, bump `local.talos_version` in
+`proxmox/talos.tf` and re-run the above. Note that the schematic ID is a hash of
+the kernel-arg list in `proxmox/talos-schematic.tf` — reordering that list
+silently changes the image on every node.
+
+### Destroying Talos VMs
 
 ```shell
-terraform destroy -var-file=proxmox_jd_terraform.tfvars -target=proxmox_virtual_environment_vm.talos_cp -target=proxmox_virtual_environment_vm.talos_worker
+terraform destroy \
+  -target=module.talos_cp_jd \
+  -target=module.talos_workers_jd
 ```
 
-Run it twice, reboot nodes after second run.
+Run it twice; reboot nodes after the second run.

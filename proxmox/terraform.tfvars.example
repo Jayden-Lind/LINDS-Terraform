@@ -1,7 +1,23 @@
-proxmox_endpoint      = "https://xxx:8006"
-proxmox_linds_endpoint = "https://xxx:8006"
-proxmox_password      = "xxx"
-proxmox_username      = "xxx@pam"
-proxmox_ssh_password  = "xxx"
-proxmox_ssh_username  = "xxx"
+proxmox_endpoint       = "https://10.0.50.246:8006"
+proxmox_linds_endpoint = "https://192.168.6.205:8006"
 
+# Preferred. Create with: pveum user token add root@pam terraform --privsep 0
+proxmox_api_token = "root@pam!terraform=00000000-0000-0000-0000-000000000000"
+
+# Fallback if no API token is set.
+# proxmox_username = "root@pam"
+# proxmox_password = "xxx"
+
+# Used for snippet uploads and the ZFS/NFS reconcilers in zfs.tf.
+proxmox_ssh_username = "root"
+
+# Prefer a key over a password:
+# proxmox_ssh_private_key = <<-EOT
+#   -----BEGIN OPENSSH PRIVATE KEY-----
+#   ...
+#   -----END OPENSSH PRIVATE KEY-----
+# EOT
+proxmox_ssh_password = "xxx"
+
+# Set to false to skip writing /etc/exports.
+# manage_nfs_exports = true

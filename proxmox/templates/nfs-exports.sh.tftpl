@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Rendered by proxmox/nfs.tf - do not edit on the host.
+#
+# Writes /etc/exports and re-exports. Touches nothing else: no ZFS pools, no
+# datasets, no properties, no snapshots.
+set -euo pipefail
+
+want=$(cat <<'TF_EOF'
+${exports}
+TF_EOF
+)
+
+if [ "$(cat /etc/exports 2>/dev/null || true)" = "$want" ]; then
+  echo "== /etc/exports already correct"
+else
+  echo "== rewriting /etc/exports"
+  printf '%s\n' "$want" > /etc/exports
+  exportfs -ra
+fi
+
+if systemctl is-active --quiet nfs-server; then
+  echo "== nfs-server running"
+else
+  echo "== starting nfs-server"
+  systemctl enable --now nfs-server
+fi

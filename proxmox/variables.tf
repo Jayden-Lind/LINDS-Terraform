@@ -1,46 +1,77 @@
+###############################################################################
+# Proxmox API
+###############################################################################
+
 variable "proxmox_endpoint" {
-  description = "Proxmox endpoint"
-  type        = string
-}
-
-variable "proxmox_username" {
-  description = "Proxmox username, generally root@pam"
-  type        = string
-}
-
-variable "proxmox_password" {
-  description = "Proxmox Password"
-  type        = string
-}
-
-variable "proxmox_ssh_username" {
-  description = "Proxmox SSH account for copying files"
-  type        = string
-}
-
-variable "proxmox_ssh_password" {
-  description = "Proxmox SSH account password"
+  description = "Proxmox API endpoint for the JD site (jd-proxmox-02)."
   type        = string
 }
 
 variable "proxmox_linds_endpoint" {
-  description = "Proxmox endpoint for Linds"
+  description = "Proxmox API endpoint for the LINDS site (linds-proxmox-01)."
   type        = string
   default     = "https://192.168.6.205:8006"
 }
 
-variable "datastore" {
-  default = "local-lvm"
+variable "proxmox_api_token" {
+  description = <<-EOT
+    Proxmox API token in `user@realm!tokenid=uuid` form. Preferred over
+    username/password. Create with:
+      pveum user token add root@pam terraform --privsep 0
+    Leave null to fall back to username/password auth.
+  EOT
+  type        = string
+  default     = null
+  sensitive   = true
 }
 
-variable "hostname_linds" {
-  default = "linds-proxmox-01"
+variable "proxmox_username" {
+  description = "Proxmox username, generally root@pam. Ignored when proxmox_api_token is set."
+  type        = string
+  default     = null
 }
 
-variable "datastore_jd" {
-  default = "ssd-mixed"
+variable "proxmox_password" {
+  description = "Proxmox password. Ignored when proxmox_api_token is set."
+  type        = string
+  default     = null
+  sensitive   = true
 }
 
-variable "hostname" {
-  default = "jd-proxmox-02"
+###############################################################################
+# Proxmox SSH (file uploads + ZFS/NFS reconcilers)
+###############################################################################
+
+variable "proxmox_ssh_username" {
+  description = "SSH account on the Proxmox nodes, used for snippet uploads and host-level reconcilers."
+  type        = string
+}
+
+variable "proxmox_ssh_password" {
+  description = "SSH password. Ignored when proxmox_ssh_private_key is set."
+  type        = string
+  default     = null
+  sensitive   = true
+}
+
+variable "proxmox_ssh_private_key" {
+  description = "PEM-encoded SSH private key. Preferred over proxmox_ssh_password."
+  type        = string
+  default     = null
+  sensitive   = true
+}
+
+###############################################################################
+# Host-level reconcilers
+###############################################################################
+
+variable "manage_nfs_exports" {
+  description = <<-EOT
+    Manage /etc/exports on jd-proxmox-02 over SSH. This is the only host-level
+    thing Terraform touches - ZFS pools, datasets, properties, tunables and
+    snapshot policy are all left alone. See nfs.tf. Set to false to make this
+    root module purely API-driven.
+  EOT
+  type        = bool
+  default     = true
 }

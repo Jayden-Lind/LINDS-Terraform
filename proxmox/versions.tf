@@ -1,11 +1,15 @@
 terraform {
+  required_version = ">= 1.9"
+
+  # State lives in the MinIO instance running as LXC 106 on jd-proxmox-02.
+  # That container is deliberately NOT managed from this root module - see
+  # ../bootstrap/README.md for why and how it is managed instead.
   backend "s3" {
     bucket = "tfstate"
     endpoints = {
       s3 = "http://jd-s3-01.linds.com.au:9000"
     }
     key = "linds.tfstate"
-
 
     region                      = "main"
     skip_credentials_validation = true
@@ -14,67 +18,31 @@ terraform {
     skip_region_validation      = true
     use_path_style              = true
   }
+
   required_providers {
     proxmox = {
       source  = "bpg/proxmox"
-      version = "0.110.0"
+      version = "~> 0.111.1"
     }
     talos = {
       source  = "siderolabs/talos"
-      version = "0.11.0"
+      version = "~> 0.11.0"
+    }
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 3.2"
+    }
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~> 3.2"
     }
     local = {
       source  = "hashicorp/local"
       version = "~> 2.5"
     }
-  }
-}
-
-provider "proxmox" {
-  endpoint = var.proxmox_endpoint
-  username = var.proxmox_username
-  password = var.proxmox_password
-  insecure = true
-  tmp_dir  = "/var/tmp"
-  ssh {
-    username = var.proxmox_ssh_username
-    password = var.proxmox_ssh_password
-    node {
-      name    = "jd-proxmox-02"
-      address = "10.0.50.246"
+    null = {
+      source  = "hashicorp/null"
+      version = "~> 3.3"
     }
   }
-}
-
-provider "proxmox" {
-  alias    = "linds"
-  endpoint = var.proxmox_linds_endpoint
-  username = var.proxmox_username
-  password = var.proxmox_password
-  insecure = true
-  tmp_dir  = "/var/tmp"
-  ssh {
-    username = var.proxmox_ssh_username
-    password = var.proxmox_ssh_password
-    node {
-      name    = "linds-proxmox-01"
-      address = "192.168.6.205"
-    }
-  }
-}
-
-provider "helm" {
-  kubernetes = {
-    host                   = talos_cluster_kubeconfig.this.kubernetes_client_configuration.host
-    client_certificate     = base64decode(talos_cluster_kubeconfig.this.kubernetes_client_configuration.client_certificate)
-    client_key             = base64decode(talos_cluster_kubeconfig.this.kubernetes_client_configuration.client_key)
-    cluster_ca_certificate = base64decode(talos_cluster_kubeconfig.this.kubernetes_client_configuration.ca_certificate)
-  }
-}
-
-provider "kubernetes" {
-  host                   = talos_cluster_kubeconfig.this.kubernetes_client_configuration.host
-  client_certificate     = base64decode(talos_cluster_kubeconfig.this.kubernetes_client_configuration.client_certificate)
-  client_key             = base64decode(talos_cluster_kubeconfig.this.kubernetes_client_configuration.client_key)
-  cluster_ca_certificate = base64decode(talos_cluster_kubeconfig.this.kubernetes_client_configuration.ca_certificate)
 }

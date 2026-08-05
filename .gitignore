@@ -1,15 +1,31 @@
-.terraform.lock.hcl
-.terraform/*
-vars.auto.pkrvars.hcl
+# Terraform working directories and state.
+# Note: .terraform.lock.hcl is deliberately NOT ignored - provider lock files
+# belong in version control so everyone resolves the same provider builds.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+
+# Variable files carry credentials; the .example versions are committed.
 terraform.tfvars
-terraform.tfstate*
-.terraform*
-*.cer
-*.key
-variables-proxmox.pkrvars.hcl
-proxmox_*_terraform.tfvars
+*.auto.tfvars
+backend.conf
 packer_*.pkrvars.hcl
+!*.example
+
+# Generated cluster credentials
 proxmox/talosconfig
 proxmox/kubeconfig
-backend.conf
+
+# Keys and certs
+*.cer
+*.key
+*.pem
+
+# Packer plugin cache
+packer/.packer.d/
+
+# IDE
 /.idea/

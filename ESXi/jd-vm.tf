@@ -141,7 +141,7 @@ resource "vsphere_virtual_machine" "JD-Kube-02" {
   name                 = "JD-Kube-02"
   resource_pool_id     = local.jd_host
   datastore_id         = vsphere_vmfs_datastore.jd-datastore.id
-  num_cpus             = 4 
+  num_cpus             = 4
   num_cores_per_socket = 4
   memory               = 8192
   firmware             = "efi"
@@ -181,7 +181,7 @@ resource "vsphere_virtual_machine" "JD-Kube-03" {
   name                 = "JD-Kube-03"
   resource_pool_id     = local.jd_host
   datastore_id         = vsphere_vmfs_datastore.jd-datastore.id
-  num_cpus             = 4 
+  num_cpus             = 4
   num_cores_per_socket = 4
   memory               = 8192
   firmware             = "efi"

@@ -1,0 +1,12 @@
+proxmox_endpoint = "https://10.0.50.246:8006"
+
+# Preferred. Create with: pveum user token add root@pam terraform --privsep 0
+proxmox_api_token = "root@pam!terraform=00000000-0000-0000-0000-000000000000"
+
+# Fallback if no API token is set.
+# proxmox_username = "root@pam"
+# proxmox_password = "xxx"
+
+# Must match access_key / secret_key in ../proxmox/backend.conf.
+minio_root_user     = "xxx"
+minio_root_password = "xxx"
