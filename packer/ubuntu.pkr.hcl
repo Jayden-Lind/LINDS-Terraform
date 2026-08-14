@@ -92,11 +92,28 @@ build {
 
   # cloud-init must come up clean on every clone, so strip the identity the
   # build itself picked up.
+  #
+  # The GRUB line is the important one. curtin persists the installer's kernel
+  # arguments into the installed system, so without this every clone boots with
+  # `autoinstall ds=nocloud` forever - which pins cloud-init's datasource list
+  # to [nocloud, None] and, on the first boot of a fresh clone, loses the race
+  # against the cidata CD-ROM being enumerated. When that happens cloud-init
+  # completes against DataSourceNone, does nothing, and only a reboot fixes it.
+  # `;s=http://...` in that line points at the Packer HTTP server, which is
+  # gone the moment the build ends; GRUB happens to truncate at the `;`, so the
+  # dead URL never actually gets used. Do not rely on that.
   provisioner "shell" {
     execute_command = "sudo -S sh -c '{{ .Vars }} {{ .Path }}'"
     inline = [
       "cloud-init status --wait || true",
-      "cloud-init clean --logs --machine-id",
+      "sed -i 's|^GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\"\"|' /etc/default/grub",
+      "update-grub",
+      # --seed as well: without it /var/lib/cloud/seed survives into the image.
+      "cloud-init clean --logs --seed --machine-id",
+      # clean leaves anything written after it was invoked. The autoinstall
+      # used to call it from runcmd, which stranded an iid-datasource-none
+      # instance dir here; belt and braces now that it no longer does.
+      "rm -rf /var/lib/cloud/instances/*",
       "rm -f /etc/netplan/50-cloud-init.yaml",
       "truncate -s 0 /etc/machine-id",
       "rm -f /var/lib/dbus/machine-id",
@@ -105,6 +122,10 @@ build {
       "rm -rf /var/lib/apt/lists/*",
       "rm -f /etc/ssh/ssh_host_*",
       "truncate -s 0 /var/log/wtmp /var/log/lastlog",
+      # The build's own boot is otherwise still in the image's syslog.
+      "find /var/log -type f -name '*.log' -exec truncate -s 0 {} +",
+      "find /var/log -type f -name 'syslog*' -exec truncate -s 0 {} +",
+      "rm -rf /var/log/journal/*",
     ]
   }
 }

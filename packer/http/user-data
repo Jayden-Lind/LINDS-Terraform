@@ -70,8 +70,10 @@ autoinstall:
 
           [Install]
           WantedBy=multi-user.target
+    # runcmd executes inside cloud-init's own scripts_user module, so anything
+    # that resets cloud-init state here deletes it out from under the modules
+    # still to run - which is what left an iid-datasource-none instance dir in
+    # the image. The identity reset belongs in the Packer provisioner, after
+    # `cloud-init status --wait`, and that is where it now lives.
     runcmd:
       - systemctl enable expand-root-lv.service
-      - sudo bash -c "echo uninitialized > /etc/machine-id"
-      - sudo bash -c "echo uninitialized > /var/lib/dbus/machine-id"
-      - cloud-init clean --logs --machine-id  

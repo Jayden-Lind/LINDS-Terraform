@@ -581,6 +581,8 @@ resource "proxmox_virtual_environment_file" "jump_cloud_config" {
         - unzip
         - k9s
       runcmd:
+        - systemctl enable --now qemu-guest-agent
+        - systemctl is-active --quiet qemu-guest-agent
         # Claude Code from Anthropic's signed apt repo, stable channel.
         - install -d -m 0755 /etc/apt/keyrings
         - curl -fsSL https://downloads.claude.ai/keys/claude-code.asc -o /etc/apt/keyrings/claude-code.asc
