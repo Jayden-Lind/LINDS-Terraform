@@ -21,3 +21,7 @@ proxmox_ssh_password = "xxx"
 
 # Set to false to skip writing /etc/exports.
 # manage_nfs_exports = true
+
+# Install media for JD-FS-01. Set while building the guest, then remove the
+# line to detach the drive.
+# windows_server_iso_file_id = "local:iso/windows_server_2025.iso"

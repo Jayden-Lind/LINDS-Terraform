@@ -62,6 +62,24 @@ variable "proxmox_ssh_private_key" {
 }
 
 ###############################################################################
+# Guest install media
+###############################################################################
+
+variable "windows_server_iso_file_id" {
+  description = <<-EOT
+    Install ISO for JD-FS-01, as `datastore:iso/filename`. Set this while
+    building the guest; null once Windows is installed, which detaches the
+    drive and drops the ISO out of the boot order.
+
+    Terraform can only model one optical drive (the provider caps `cdrom` at
+    one block), so the virtio-win ISO is attached by hand for the install. See
+    the JD-FS-01 block in vms-jd.tf.
+  EOT
+  type        = string
+  default     = null
+}
+
+###############################################################################
 # Host-level reconcilers
 ###############################################################################
 

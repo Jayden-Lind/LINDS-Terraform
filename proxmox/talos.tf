@@ -7,8 +7,8 @@
 ###############################################################################
 
 locals {
-  talos_version      = "v1.13.4"
-  kubernetes_version = "v1.36.1"
+  talos_version      = "v1.13.8"
+  kubernetes_version = "v1.36.3"
 
   cluster_name     = "talos-cluster"
   cluster_endpoint = "https://10.0.53.200:6443"
@@ -152,18 +152,24 @@ locals {
 resource "talos_machine_secrets" "this" {
 }
 
+# kubernetes_version pins the control plane static pod images (apiserver,
+# controller-manager, scheduler). Without it the provider falls back to whatever
+# it was built against, which is how the static pods ended up on v1.36.0 while
+# the kubelets ran the v1.36.1 set by machine.kubelet.image above.
 data "talos_machine_configuration" "controlplane" {
-  cluster_name     = local.cluster_name
-  cluster_endpoint = local.cluster_endpoint
-  machine_type     = "controlplane"
-  machine_secrets  = talos_machine_secrets.this.machine_secrets
+  cluster_name       = local.cluster_name
+  cluster_endpoint   = local.cluster_endpoint
+  machine_type       = "controlplane"
+  machine_secrets    = talos_machine_secrets.this.machine_secrets
+  kubernetes_version = local.kubernetes_version
 }
 
 data "talos_machine_configuration" "worker" {
-  cluster_name     = local.cluster_name
-  cluster_endpoint = local.cluster_endpoint
-  machine_type     = "worker"
-  machine_secrets  = talos_machine_secrets.this.machine_secrets
+  cluster_name       = local.cluster_name
+  cluster_endpoint   = local.cluster_endpoint
+  machine_type       = "worker"
+  machine_secrets    = talos_machine_secrets.this.machine_secrets
+  kubernetes_version = local.kubernetes_version
 }
 
 data "talos_client_configuration" "this" {

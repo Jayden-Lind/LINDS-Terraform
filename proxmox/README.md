@@ -105,3 +105,42 @@ from under the installed guest.
 **The `NAS` storage entry is dead.** It is pinned to `jd-proxmox-01`, a node that
 no longer exists. Declared in `storage.tf` so it is visible rather than silently
 lurking; remove with `pvesm remove NAS` when you are sure.
+
+**`JD-FS-01` exists so SMB signing can be off.** A domain controller cannot
+disable server-side signing — the Default Domain Controllers Policy requires it
+— so the bulk shares move off `JD-DC-01` onto a domain member. Server 2025
+still defaults to requiring signing, so it is disabled explicitly in the guest.
+Single-tenant LAN; same tradeoff as the guest CPU flags.
+
+## Moving the bulk zvol to JD-FS-01
+
+`NAS-SSD` has 6.93 TiB free against the 8.99 TiB written to
+`NAS-SSD/vm-1102-disk-0`, so the 14.2 TiB volume cannot be copied — it moves by
+reassign, which is a rename:
+
+```shell
+qm shutdown 1102 && qm shutdown 1103          # both must be stopped
+qm disk move 1102 scsi1 --target-vmid 1103 --target-disk scsi1
+```
+
+**Then immediately reconcile Terraform**, in the same window: delete the
+`scsi1` block from `proxmox_virtual_environment_vm.jd_dc` and add it to
+`jd_fs`, attributes unchanged:
+
+```hcl
+  disk {
+    datastore_id = "NAS-SSD"
+    interface    = "scsi1"
+    size         = 14549
+    discard      = "on"
+    iothread     = true
+    ssd          = true
+  }
+```
+
+`terraform plan` must then report **no changes** — both resources already match
+a host that moved. Do not leave the gap open: an apply in between sees `jd_dc`
+missing a 14549 GiB disk and tries to recreate it.
+
+Rollback is the same command with the VMIDs swapped, valid until the guest
+writes to the volume.
