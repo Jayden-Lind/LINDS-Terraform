@@ -112,35 +112,48 @@ disable server-side signing — the Default Domain Controllers Policy requires i
 still defaults to requiring signing, so it is disabled explicitly in the guest.
 Single-tenant LAN; same tradeoff as the guest CPU flags.
 
-## Moving the bulk zvol to JD-FS-01
+## The bulk zvol on JD-FS-01 — done, and unmanaged on purpose
 
-`NAS-SSD` has 6.93 TiB free against the 8.99 TiB written to
-`NAS-SSD/vm-1102-disk-0`, so the 14.2 TiB volume cannot be copied — it moves by
-reassign, which is a rename:
+`NAS-SSD` had 6.93 TiB free against the 8.99 TiB written, so the 14.2 TiB
+volume could not be copied. It moved by reassign, which is a rename:
 
 ```shell
 qm shutdown 1102 && qm shutdown 1103          # both must be stopped
 qm disk move 1102 scsi1 --target-vmid 1103 --target-disk scsi1
 ```
 
-**Then immediately reconcile Terraform**, in the same window: delete the
-`scsi1` block from `proxmox_virtual_environment_vm.jd_dc` and add it to
-`jd_fs`, attributes unchanged:
+That is complete: the volume is now `NAS-SSD:vm-1103-disk-0` on `1103:scsi1`,
+same zvol, same data, `creation Sat Aug 30 23:24 2025`.
 
-```hcl
-  disk {
-    datastore_id = "NAS-SSD"
-    interface    = "scsi1"
-    size         = 14549
-    discard      = "on"
-    iothread     = true
-    ssd          = true
-  }
+**Do not add a matching `disk` block to `jd_fs`.** An earlier draft of this
+section said to, and said `terraform plan` would then report no changes. It
+does not. The volume has never been in state — neither `jd_dc` nor `jd_fs` has
+ever carried a `scsi1` entry — because a reassign is a host-side rename the
+provider never saw. There is no way to import a disk into an existing VM
+resource, so adding the block plans as `+ disk` with no `path_in_datastore`,
+and applying it would try to create a *second* 14549 GiB volume on a datastore
+that cannot hold one.
+
+Leaving it undeclared is what protects it. The provider does not touch disks it
+does not model.
+
+Rollback of the move is the same command with the VMIDs swapped, valid only
+until the guest writes to the volume.
+
+## If the disk vanishes inside Windows but `qm config` still shows it
+
+`scsi1` was hot-unplugged from the running guest on 2026-08-14 while the config
+kept listing it. Check the live machine, not the config file:
+
+```shell
+echo -e "info block\nquit" | qm monitor 1103 | grep drive-scsi1
 ```
 
-`terraform plan` must then report **no changes** — both resources already match
-a host that moved. Do not leave the gap open: an apply in between sees `jd_dc`
-missing a 14549 GiB disk and tries to recreate it.
+No output means QEMU does not have the disk, whatever `qm config 1103` says —
+Windows is right and the config is lying. `qm reboot` will not fix it and on a
+guest with no agent it times out (`VM quit/powerdown failed - got timeout`).
+Only a full stop/start relaunches QEMU with the device, because
+`virtio-scsi-single` needs a whole new controller that PCI hotplug does not
+reliably deliver to Windows.
 
-Rollback is the same command with the VMIDs swapped, valid until the guest
-writes to the volume.
+The volume is untouched by any of this — an unplug detaches, it does not write.

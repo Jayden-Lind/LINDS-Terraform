@@ -153,9 +153,17 @@ resource "proxmox_virtual_environment_vm" "jd_dc" {
 # That is deliberate. This host serves a single-tenant LAN, the same tradeoff
 # the guest CPU flags in locals.tf already make. Do not "fix" it.
 #
-# scsi1 is not here yet. It is JD-DC-01's 14.2 TiB NAS-SSD zvol, which arrives
-# by PVE disk reassign rather than a copy - NAS-SSD has 6.93 TiB free against
-# 8.99 TiB written, so there is no room to hold both. See README.md.
+# scsi1 - the 14.2 TiB bulk share volume, NAS-SSD:vm-1103-disk-0 - is
+# DELIBERATELY NOT DECLARED HERE. It arrived from JD-DC-01 by PVE disk
+# reassign, which is a rename, so it has never passed through Terraform and is
+# in no state file. It cannot be adopted by simply adding a `disk` block: the
+# provider has no path to import an existing volume into an existing resource,
+# so the plan reads as `+ disk` with no path_in_datastore and an apply would
+# try to CREATE a second 14549 GiB volume on a datastore with 6.93 TiB free.
+#
+# Leaving it undeclared is what keeps it safe - the provider does not touch
+# disks it does not model, which is why the volume survived the 2026-08-14
+# apply intact. Confirm with `qm config 1103` before and after any apply here.
 ###############################################################################
 
 resource "proxmox_virtual_environment_vm" "jd_fs" {
