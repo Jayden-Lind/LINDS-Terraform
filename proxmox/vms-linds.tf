@@ -67,7 +67,8 @@ resource "proxmox_virtual_environment_vm" "linds_plex" {
     interface    = "scsi0"
     size         = 20
     iothread     = true
-    discard      = "ignore"
+    discard      = "on"
+    ssd          = true
   }
 
   network_device {
@@ -105,7 +106,8 @@ resource "proxmox_virtual_environment_vm" "linds_torrent" {
     interface    = "scsi0"
     size         = 16
     iothread     = true
-    discard      = "ignore"
+    discard      = "on"
+    ssd          = true
   }
 
   clone {

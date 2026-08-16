@@ -37,7 +37,8 @@ resource "proxmox_virtual_environment_vm" "this" {
     interface    = "scsi0"
     size         = var.disk_size
     iothread     = true
-    discard      = "ignore"
+    discard      = "on"
+    ssd          = true
   }
 
   cdrom {

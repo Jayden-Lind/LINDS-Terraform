@@ -8,8 +8,9 @@
 locals {
   cilium_version = "1.20.0"
 
-  # BGP: each site peers with its own VyOS router. PodCIDRs and the
-  # LoadBalancer pool are advertised; ClusterIP deliberately is not.
+  # BGP: each site peers with its own VyOS router. PodCIDRs, the LoadBalancer
+  # pool and ClusterIPs are advertised, so every Service is reachable from the
+  # LAN by its ClusterIP (see the Service advertisement below).
   bgp = {
     jd = {
       local_asn    = 64512
@@ -244,10 +245,19 @@ locals {
           {
             advertisementType = "Service"
             service = {
-              addresses = ["LoadBalancerIP", "ExternalIP"]
+              # ClusterIP is advertised as a /32 per Service from every node in
+              # the site's BGP instance, so each VyOS sees an ECMP set and a
+              # dead node drops out of the path set instead of blackholing.
+              # This only works because bpf.lbExternalClusterIP is true above -
+              # without it a node silently drops off-cluster traffic addressed
+              # to a ClusterIP, and the route would be a black hole.
+              #
+              # Headless Services have no ClusterIP and are skipped; their
+              # names resolve to pod IPs, which the PodCIDR advertisement
+              # already makes routable.
+              addresses = ["LoadBalancerIP", "ExternalIP", "ClusterIP"]
             }
-            # Match every service. ClusterIP is deliberately absent from
-            # `addresses` above - it stays internal to Cilium.
+            # Match every service.
             selector = {
               matchExpressions = [
                 {
