@@ -21,6 +21,13 @@ resource "proxmox_network_linux_bridge" "lan" {
   vlan_aware = true
   mtu        = 1500
 
+  # The CX-4 Lx can hardware-filter at most 512 VLANs per vport; the Proxmox
+  # default of 2-4094 overflows that and forces the NIC into promiscuous
+  # software filtering (dmesg: "netdev vlans list size (4094) > (512)").
+  # Any new VLAN terminated on JD-VyOS-01 must be added here or its tagged
+  # traffic will be dropped at the bridge. Native/untagged LAN needs no entry.
+  vids = "50-100"
+
   ports = ["ens5f1np1"]
 }
 

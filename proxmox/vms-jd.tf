@@ -6,6 +6,7 @@
 #   talos-worker-01 10.0.53.201
 #   talos-worker-02 10.0.53.202
 #   talos-worker-03 10.0.53.203
+#   talos-worker-04 10.0.53.204
 ###############################################################################
 
 module "talos_cp_jd" {
@@ -32,6 +33,7 @@ module "talos_workers_jd" {
     "talos-worker-01" = { mac_address = "02:24:11:d4:f3:d1" }
     "talos-worker-02" = { mac_address = "02:24:11:d4:f3:d2" }
     "talos-worker-03" = { mac_address = "02:24:11:d4:f3:d3" }
+    "talos-worker-04" = { mac_address = "02:24:11:d4:f3:d4" }
   }
 
   role           = "worker"
@@ -117,7 +119,7 @@ resource "proxmox_virtual_environment_vm" "jd_dc" {
     datastore_id = local.datastores.jd
     interface    = "scsi0"
     size         = 40
-    cache        = "writeback"
+    cache        = "none"
     discard      = "on"
     iothread     = true
     ssd          = true
@@ -220,7 +222,7 @@ resource "proxmox_virtual_environment_vm" "jd_fs" {
     datastore_id = local.datastores.jd
     interface    = "scsi0"
     size         = 80
-    cache        = "writeback"
+    cache        = "none"
     discard      = "on"
     iothread     = true
     ssd          = true
@@ -469,7 +471,7 @@ resource "proxmox_virtual_environment_vm" "jd_jump" {
     datastore_id = local.datastores.jd
     interface    = "scsi0"
     size         = 64
-    cache        = "writeback"
+    cache        = "none"
     discard      = "on"
     iothread     = true
     ssd          = true

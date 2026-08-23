@@ -1,7 +1,7 @@
 ###############################################################################
 # Talos cluster configuration
 #
-# Single control plane at 10.0.53.200, three workers at .201-.203 on the JD
+# Single control plane at 10.0.53.200, four workers at .201-.204 on the JD
 # site, two workers at 10.3.1.100-101 on the LINDS site. Scheduling is allowed
 # on the control plane.
 ###############################################################################
@@ -14,7 +14,7 @@ locals {
   cluster_endpoint = "https://10.0.53.200:6443"
 
   controlplane_node = "10.0.53.200"
-  worker_nodes_jd   = [for i in range(3) : "10.0.53.${201 + i}"]
+  worker_nodes_jd   = [for i in range(4) : "10.0.53.${201 + i}"]
   worker_nodes_lind = [for i in range(2) : "10.3.1.${100 + i}"]
 
   talos_common_config = {
