@@ -132,3 +132,36 @@ resource "talos_image_factory_schematic" "this" {
     }
   })
 }
+
+###############################################################################
+# Boot ISOs, pulled from the image factory onto each site's local ISO store.
+#
+# The filename carries the Talos version, so bumping local.talos_version
+# downloads the matching ISO and repoints every node's cdrom at it - no more
+# hand-managed talos.iso going stale. That staleness is not hypothetical: the
+# original talos.iso was v1.11.6, and its maintenance-mode Talos rejected the
+# v1.13-generation machine config (unknown key machine.install.grubUseUKICmdline)
+# when talos-worker-04 was added.
+#
+# These must be the factory schematic images, not the vanilla GitHub release
+# ISOs: maintenance mode then boots with the same kernel args and extensions
+# the installed system gets.
+###############################################################################
+
+resource "proxmox_virtual_environment_download_file" "talos_iso_jd" {
+  content_type = "iso"
+  datastore_id = "local"
+  node_name    = local.nodes.jd.name
+  file_name    = "talos-${local.talos_version}-amd.iso"
+  url          = "https://factory.talos.dev/image/${talos_image_factory_schematic.this["amd"].id}/${local.talos_version}/metal-amd64.iso"
+}
+
+resource "proxmox_virtual_environment_download_file" "talos_iso_linds" {
+  provider = proxmox.linds
+
+  content_type = "iso"
+  datastore_id = "local"
+  node_name    = local.nodes.linds.name
+  file_name    = "talos-${local.talos_version}-intel.iso"
+  url          = "https://factory.talos.dev/image/${talos_image_factory_schematic.this["intel"].id}/${local.talos_version}/metal-amd64.iso"
+}

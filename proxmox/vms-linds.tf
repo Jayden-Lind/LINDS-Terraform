@@ -29,6 +29,7 @@ module "talos_workers_linds" {
   cpu_flags      = local.guest_cpu_flags
   vlan_id        = 300
   network_queues = 4
+  cdrom_file_id  = proxmox_virtual_environment_download_file.talos_iso_linds.id
 }
 
 resource "proxmox_virtual_environment_vm" "linds_plex" {

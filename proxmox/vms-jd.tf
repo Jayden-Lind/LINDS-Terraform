@@ -24,6 +24,7 @@ module "talos_cp_jd" {
   cpu_flags      = local.guest_cpu_flags
   vlan_id        = 53
   network_queues = 8
+  cdrom_file_id  = proxmox_virtual_environment_download_file.talos_iso_jd.id
 }
 
 module "talos_workers_jd" {
@@ -44,6 +45,7 @@ module "talos_workers_jd" {
   cpu_flags      = local.guest_cpu_flags
   vlan_id        = 53
   network_queues = 8
+  cdrom_file_id  = proxmox_virtual_environment_download_file.talos_iso_jd.id
 }
 
 ###############################################################################
