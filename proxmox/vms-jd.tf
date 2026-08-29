@@ -696,7 +696,6 @@ resource "proxmox_virtual_environment_file" "jump_cloud_config" {
         - ripgrep
         - tmux
         - unzip
-        - k9s
       runcmd:
         - systemctl enable --now qemu-guest-agent
         - systemctl is-active --quiet qemu-guest-agent
@@ -710,6 +709,25 @@ resource "proxmox_virtual_environment_file" "jump_cloud_config" {
         - DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::=--force-confold dist-upgrade
         - DEBIAN_FRONTEND=noninteractive apt-get -y install claude-code
         - DEBIAN_FRONTEND=noninteractive apt-get -y autoremove --purge
+        # k9s publishes no apt package - `apt-cache policy k9s` returns nothing
+        # on Ubuntu - so it was previously listed under `packages:` and silently
+        # never installed. Pinned binary instead, and unlike the key check above
+        # this one runs under `set -e` in a subshell, so a checksum mismatch
+        # actually prevents the install rather than just printing.
+        - |
+          (
+            set -e
+            cd /tmp
+            K9S=v0.51.0
+            curl -fsSL -O https://github.com/derailed/k9s/releases/download/$K9S/k9s_Linux_amd64.tar.gz
+            curl -fsSL -O https://github.com/derailed/k9s/releases/download/$K9S/checksums.sha256
+            # Anchored: the checksums file also lists an .sbom.json that is not
+            # downloaded here, and a loose grep would fail on the missing file.
+            grep -E '^[a-f0-9]{64}  k9s_Linux_amd64\.tar\.gz$' checksums.sha256 | sha256sum -c -
+            tar -xzf k9s_Linux_amd64.tar.gz k9s
+            install -m 0755 k9s /usr/local/bin/k9s
+            rm -f k9s k9s_Linux_amd64.tar.gz checksums.sha256
+          )
         # --- Remote Control -------------------------------------------------
         - install -d -o jayden -g jayden -m 0700 /home/jayden/.claude
         - install -d -o jayden -g jayden -m 0755 /home/jayden/work
