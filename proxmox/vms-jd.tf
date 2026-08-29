@@ -555,6 +555,33 @@ resource "proxmox_virtual_environment_file" "kube_cloud_config" {
 # No credentials are baked in. Claude Code authenticates against the Max
 # subscription interactively - run `claude` and use /login. Do not set
 # ANTHROPIC_API_KEY here; that bills per token instead.
+#
+# Remote Control (control this box from the Claude phone app) is set up here as
+# a systemd *user* service, claude-remote-control.service, running the server
+# mode of `claude remote-control` so several concurrent sessions can be driven
+# from a phone against one process. Everything it needs is declared above:
+# the unit, ~/.claude/settings.json, the claude-rc helper, linger, and the
+# workspace-trust seed.
+#
+# ONE STEP CANNOT BE AUTOMATED. Remote Control requires an eligible claude.ai
+# login, and an API key is not accepted for it, so a fresh build has nothing to
+# authenticate with. The unit is therefore left `enable`d but not started. To
+# finish the build, once:
+#
+#     ssh jayden@jd-jump-01
+#     claude          # /login, complete the browser flow
+#     claude-rc start # or just reboot - it is enabled for boot
+#
+# After that the service is self-sufficient across reboots and network drops.
+# Do not try to bake ~/.claude/.credentials.json or a `claude setup-token`
+# token into this file: it is a long-lived credential to the whole Max account
+# and this repository is on GitHub.
+#
+# The permission mode is bypassPermissions - deliberate, and a real exposure.
+# This guest has NOPASSWD sudo and SSH keys to the Proxmox host and the Talos
+# cluster, so anyone holding the Anthropic account can drive all of it with no
+# confirmation prompt. Account 2FA is the only control in front of that. Drop
+# to --permission-mode acceptEdits if that trade stops being worth it.
 ###############################################################################
 
 resource "proxmox_virtual_environment_file" "jump_cloud_config" {
@@ -578,6 +605,84 @@ resource "proxmox_virtual_environment_file" "jump_cloud_config" {
           lock_passwd: false
           ssh_authorized_keys:
             - "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDPWOKxGwpEJ/BU5h71sdPWdnuTgZzx4KRlApHZpoPJUYwDQUHYCXCHsbRrgRUTOuzCJ0Z5HAkDRBUJP8duHgtW7heCv2Emb5HfIbQFierkJnaSwjT68B9JNS8z4w6nNUPViXlPn4IN/hmt2YAWts1i+7xQf0laxyZiHvqm2CQyKUpWYg5KrGgLurZdatDAfEcTgxmVB2OzEH9JREn9pW/9wYIB3dJX5Exvbq8y4ptDiTx2q42DRybHVifIKkAKxOE/pvfTIN++7IKXq6G8uWKefrHLDzdyzpXIg+yqN/uWHb0rWRVe6wmI5EwIlL0jdro/3skbw3bSORDIpZaMWZL+F18HhNW9eW7vKGK2heWzehBlUmmwXJiR3C6qmLiv+lBMvgGB/UZ4eA9x5hvVdQ8WQDJnzdjXhnsmd9yS9btGsm4Gqz+WQGYPHs2GsLMfWlY5TAxM/Qn2Q4SDj7/QHjGsGMYQ+RhHchdjEART8Tiae/+SuA0BZxVPO6QDwLPCYVs= root@jd-dev-01"
+
+      write_files:
+        # Deferred to the final stage: `write-files` normally runs before
+        # `users-groups`, and these all land in jayden's home.
+        - path: /home/jayden/.claude/settings.json
+          owner: jayden:jayden
+          permissions: "0644"
+          defer: true
+          content: |
+            {
+              "permissions": {
+                "defaultMode": "auto",
+                "additionalDirectories": ["/home/jayden"]
+              },
+              "skipDangerousModePermissionPrompt": true
+            }
+
+        - path: /home/jayden/.config/systemd/user/claude-remote-control.service
+          owner: jayden:jayden
+          permissions: "0644"
+          defer: true
+          content: |
+            [Unit]
+            Description=Claude Code Remote Control server (unattended)
+            Documentation=https://code.claude.com/docs/en/remote-control
+            After=network-online.target
+            Wants=network-online.target
+
+            [Service]
+            Type=simple
+            WorkingDirectory=/home/jayden/work
+            Environment=HOME=/home/jayden
+            Environment=CLAUDE_REMOTE_CONTROL_SESSION_NAME_PREFIX=jd-jump-01
+            ExecStart=/usr/bin/claude remote-control --permission-mode bypassPermissions
+            # Server mode exits by design after ~10 min of unreachable network,
+            # so a restart is the normal path back, not an error path.
+            Restart=always
+            RestartSec=10
+            # Never latch the unit off: before the first /login every start
+            # fails, and it must come up on its own once credentials exist.
+            StartLimitIntervalSec=0
+            StandardOutput=journal
+            StandardError=journal
+
+            [Install]
+            WantedBy=default.target
+
+        - path: /home/jayden/.local/bin/claude-rc
+          owner: jayden:jayden
+          permissions: "0755"
+          defer: true
+          content: |
+            #!/usr/bin/env bash
+            # Manage the unattended Claude Code Remote Control server.
+            export XDG_RUNTIME_DIR=/run/user/$(id -u)
+            U=claude-remote-control.service
+            case "$${1:-url}" in
+              url)
+                journalctl --user -u "$U" -n 400 --no-pager -o cat 2>/dev/null \
+                  | grep -o 'https://claude.ai/code?environment=env_[A-Za-z0-9]*' | tail -1
+                journalctl --user -u "$U" -n 400 --no-pager -o cat 2>/dev/null \
+                  | grep -oE "$(hostname)-[a-z-]+" | tail -1 | sed 's/^/session: /'
+                ;;
+              status)  systemctl --user status "$U" --no-pager ;;
+              logs)    journalctl --user -u "$U" -f -o cat ;;
+              restart) systemctl --user restart "$U" && echo restarted ;;
+              stop)    systemctl --user stop "$U" && echo stopped ;;
+              start)   systemctl --user start "$U" && echo started ;;
+              *) echo "usage: claude-rc {url|status|logs|restart|stop|start}" >&2; exit 2 ;;
+            esac
+
+        - path: /etc/profile.d/zz-local-bin.sh
+          permissions: "0644"
+          content: |
+            case ":$PATH:" in
+              *":$HOME/.local/bin:"*) ;;
+              *) PATH="$HOME/.local/bin:$PATH" ;;
+            esac
 
       package_update: true
       package_upgrade: true
@@ -605,6 +710,27 @@ resource "proxmox_virtual_environment_file" "jump_cloud_config" {
         - DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::=--force-confold dist-upgrade
         - DEBIAN_FRONTEND=noninteractive apt-get -y install claude-code
         - DEBIAN_FRONTEND=noninteractive apt-get -y autoremove --purge
+        # --- Remote Control -------------------------------------------------
+        - install -d -o jayden -g jayden -m 0700 /home/jayden/.claude
+        - install -d -o jayden -g jayden -m 0755 /home/jayden/work
+        - chown -R jayden:jayden /home/jayden/.claude /home/jayden/.config /home/jayden/.local
+        # The user manager must run without a login session for the service to
+        # survive SSH disconnects and come back after a reboot.
+        - loginctl enable-linger jayden
+        # enable-linger brings the user manager up asynchronously; without this
+        # /run/user/<uid> may not exist yet and `systemctl --user` below fails.
+        - systemctl start user@$(id -u jayden).service
+        # Pre-accept workspace trust for the server's working directory. The
+        # server refuses to start in an untrusted directory and there is no
+        # non-interactive trust command, so the state file is seeded directly.
+        # /home/jayden itself cannot be the working directory - Claude Code
+        # never persists trust for a home directory, by design - so sessions
+        # root in ~/work and reach the rest of the home through the
+        # additionalDirectories grant in settings.json above.
+        - runuser -u jayden -- python3 -c "import json,os;p='/home/jayden/.claude.json';d=json.load(open(p)) if os.path.exists(p) else {};d.setdefault('projects',{}).setdefault('/home/jayden/work',{})['hasTrustDialogAccepted']=True;json.dump(d,open(p,'w'),indent=2)"
+        - runuser -u jayden -- env XDG_RUNTIME_DIR=/run/user/$(id -u jayden) systemctl --user daemon-reload
+        # Enabled, not started: there are no credentials yet. See the header.
+        - runuser -u jayden -- env XDG_RUNTIME_DIR=/run/user/$(id -u jayden) systemctl --user enable claude-remote-control.service
     EOF
     file_name = "jd-jump-01.cloud-config.yaml"
   }
