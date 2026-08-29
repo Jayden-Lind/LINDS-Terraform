@@ -6,7 +6,7 @@
 ###############################################################################
 
 locals {
-  cilium_version = "1.20.0"
+  cilium_version = "1.20.1"
 
   # BGP: each site peers with its own VyOS router. PodCIDRs, the LoadBalancer
   # pool and ClusterIPs are advertised, so every Service is reachable from the
