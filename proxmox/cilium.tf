@@ -137,7 +137,11 @@ locals {
       enabled = true
       metrics = {
         enableOpenMetrics = true
-        enabled           = ["dns", "drop", "tcp", "flow", "port-distribution", "icmp", "httpV2"]
+        # httpV2 needs L7 proxy visibility to produce anything (there are no
+        # L7 policies here, so it only paid the accounting cost) and
+        # port-distribution is a high-cardinality series per node. Both
+        # dropped; dns/drop/tcp/flow/icmp keep the Hubble UI fully functional.
+        enabled = ["dns", "drop", "tcp", "flow", "icmp"]
         serviceMonitor = {
           enabled = true
         }
