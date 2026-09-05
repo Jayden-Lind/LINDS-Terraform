@@ -107,7 +107,7 @@ export TALOSCONFIG=proxmox/talosconfig
 AMD=$(terraform -chdir=proxmox output -json talos_installer_images | jq -r .amd)
 INTEL=$(terraform -chdir=proxmox output -json talos_installer_images | jq -r .intel)
 
-for node in 10.0.53.201 10.0.53.202 10.0.53.203; do
+for node in 10.0.53.201 10.0.53.202 10.0.53.203 10.0.53.204; do
   talosctl upgrade --nodes $node --image "$AMD" --wait
 done
 
@@ -121,7 +121,23 @@ talosctl upgrade --nodes 10.0.53.200 --image "$AMD" --wait
 Verify:
 
 ```shell
-talosctl version --nodes 10.0.53.200,10.0.53.201,10.0.53.202,10.0.53.203,10.3.1.100,10.3.1.101
+talosctl version --nodes 10.0.53.200,10.0.53.201,10.0.53.202,10.0.53.203,10.0.53.204,10.3.1.100,10.3.1.101
+```
+
+`talosctl upgrade` cordons and drains each node first (5 minute drain timeout).
+The CNPG primary is protected by a PodDisruptionBudget that blocks its eviction,
+so switch it to the other instance before draining its node:
+
+```shell
+kubectl cnpg promote linds-postgres <other-instance> -n postgresql-linds
+```
+
+Then the Kubernetes version: bump `local.kubernetes_version`, apply the control
+plane first so kubelets never run ahead of the API server, then the workers:
+
+```shell
+terraform -chdir=proxmox apply -target=talos_machine_configuration_apply.controlplane
+terraform -chdir=proxmox apply
 ```
 
 To move to a new Talos release, bump `local.talos_version` in

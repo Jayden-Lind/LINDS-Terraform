@@ -7,7 +7,12 @@
 ###############################################################################
 
 locals {
-  talos_version      = "v1.13.8"
+  # Upgrade order: bump talos_version, `terraform apply` (machine config only -
+  # nothing reboots), then `talosctl upgrade` node by node with the installer
+  # image from `terraform output talos_installer_images`. Only after every node
+  # runs the new Talos bump kubernetes_version and apply again - control plane
+  # first (-target the controlplane apply), then the workers.
+  talos_version      = "v1.14.0"
   kubernetes_version = "v1.36.3"
 
   cluster_name     = "talos-cluster"
@@ -25,11 +30,23 @@ locals {
       }
       kubelet = {
         image = "ghcr.io/siderolabs/kubelet:${local.kubernetes_version}-fat"
+        extraConfig = {
+          # Pull images in parallel instead of one at a time per node; a
+          # drained node coming back was serialising 15+ pulls.
+          serializeImagePulls   = false
+          maxParallelImagePulls = 5
+        }
       }
       # Declarative replacement for the old node_labels local-exec hack.
-      # LINDS workers override this to datacenter=linds below.
+      # LINDS workers override both labels to linds below.
+      #
+      # topology.kubernetes.io/zone is what Kubernetes topology-aware routing
+      # (Service.spec.trafficDistribution) and Cilium's serviceTopology key on;
+      # `datacenter` stays as the label the existing nodeSelectors and spread
+      # constraints in LINDS-Kubernetes use. Same value, two consumers.
       nodeLabels = {
-        datacenter = "jd"
+        datacenter                    = "jd"
+        "topology.kubernetes.io/zone" = "jd"
       }
       features = {
         hostDNS = {
@@ -113,7 +130,8 @@ locals {
         image = "factory.talos.dev/installer/${talos_image_factory_schematic.this["intel"].id}:${local.talos_version}"
       }
       nodeLabels = {
-        datacenter = "linds"
+        datacenter                    = "linds"
+        "topology.kubernetes.io/zone" = "linds"
       }
     })
   })
@@ -127,12 +145,16 @@ locals {
             name = "PodSecurity"
             configuration = {
               apiVersion = "pod-security.admission.config.k8s.io/v1alpha1"
+              # Nothing is enforced (the CSI drivers, Zabbix agent, Cilium
+              # and Home Assistant all need privileged/hostNetwork), but
+              # warn+audit at baseline surfaces which workloads would fail a
+              # future baseline enforcement instead of hiding it.
               defaults = {
-                audit             = "privileged"
+                audit             = "baseline"
                 "audit-version"   = "latest"
                 enforce           = "privileged"
                 "enforce-version" = "latest"
-                warn              = "privileged"
+                warn              = "baseline"
                 "warn-version"    = "latest"
               }
               exemptions = {
@@ -185,10 +207,15 @@ data "talos_client_configuration" "this" {
   )
 }
 
+# apply_mode = no_reboot on all three: the provider's default "auto" reboots a
+# node on the spot if a config change needs it, which on a plain `terraform
+# apply` would reboot every node at once. Fail instead, and stage such a change
+# deliberately.
 resource "talos_machine_configuration_apply" "controlplane" {
   client_configuration        = talos_machine_secrets.this.client_configuration
   machine_configuration_input = data.talos_machine_configuration.controlplane.machine_configuration
   node                        = local.controlplane_node
+  apply_mode                  = "no_reboot"
 
   config_patches = [
     yamlencode(local.talos_common_config),
@@ -204,6 +231,7 @@ resource "talos_machine_configuration_apply" "worker" {
   client_configuration        = talos_machine_secrets.this.client_configuration
   machine_configuration_input = data.talos_machine_configuration.worker.machine_configuration
   node                        = local.worker_nodes_jd[count.index]
+  apply_mode                  = "no_reboot"
 
   config_patches = [yamlencode(local.talos_common_config)]
 
@@ -216,6 +244,7 @@ resource "talos_machine_configuration_apply" "worker_linds" {
   client_configuration        = talos_machine_secrets.this.client_configuration
   machine_configuration_input = data.talos_machine_configuration.worker.machine_configuration
   node                        = local.worker_nodes_lind[count.index]
+  apply_mode                  = "no_reboot"
 
   config_patches = [yamlencode(local.talos_common_config_linds)]
 

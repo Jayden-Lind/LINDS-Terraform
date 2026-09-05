@@ -42,6 +42,13 @@ locals {
       acceleration = "best-effort"
       mode         = "hybrid"
     }
+    # Honour Service.spec.trafficDistribution (EndpointSlice zone hints) so a
+    # linds pod resolving via kube-dns, or hitting any other Service with
+    # endpoints at both sites, stays on its own site. Needs the
+    # topology.kubernetes.io/zone node label set in talos.tf.
+    loadBalancer = {
+      serviceTopology = true
+    }
     pmtuDiscovery = {
       enabled = true
     }
@@ -141,6 +148,11 @@ locals {
           className = "nginx"
           annotations = {
             "cert-manager.io/cluster-issuer" = "linds-ca"
+            # Kyverno adds these to every other Ingress (server-auth EKU so
+            # iOS/macOS accept the leaf) but skips kube-system, so set them
+            # here by hand. Values match kyverno/ingress-cert-server-auth.yaml.
+            "cert-manager.io/usages"   = "digital signature, key encipherment, server auth"
+            "cert-manager.io/duration" = "2160h"
           }
           hosts = ["hubble.linds.com.au"]
           tls = [

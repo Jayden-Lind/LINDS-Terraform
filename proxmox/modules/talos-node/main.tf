@@ -57,6 +57,11 @@ resource "proxmox_virtual_environment_vm" "this" {
     type = "l26"
   }
 
+  # Never let a Terraform apply reboot a cluster node as a side effect of a
+  # VM attribute change (bpg defaults this to true). Reboots are done with
+  # talosctl, one node at a time, after cordon and drain.
+  reboot_after_update = false
+
   lifecycle {
     ignore_changes = [clone]
   }
