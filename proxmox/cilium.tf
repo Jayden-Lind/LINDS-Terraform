@@ -34,6 +34,10 @@ locals {
     ipam = {
       mode = "kubernetes"
     }
+    # Restart the agents when their ConfigMap changes. Without this a values
+    # change (enable-service-topology on 2026-09-05, for one) only lands on a
+    # node the next time it happens to reboot.
+    rollOutCiliumPods    = true
     kubeProxyReplacement = true
     socketLB = {
       enabled = true

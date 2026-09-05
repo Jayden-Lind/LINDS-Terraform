@@ -13,7 +13,7 @@ locals {
   # runs the new Talos bump kubernetes_version and apply again - control plane
   # first (-target the controlplane apply), then the workers.
   talos_version      = "v1.14.0"
-  kubernetes_version = "v1.36.3"
+  kubernetes_version = "v1.37.0"
 
   cluster_name     = "talos-cluster"
   cluster_endpoint = "https://10.0.53.200:6443"
@@ -144,7 +144,9 @@ locals {
           {
             name = "PodSecurity"
             configuration = {
-              apiVersion = "pod-security.admission.config.k8s.io/v1alpha1"
+              # v1 has been GA since Kubernetes 1.25; the alpha version was
+              # only still accepted, not documented.
+              apiVersion = "pod-security.admission.config.k8s.io/v1"
               # Nothing is enforced (the CSI drivers, Zabbix agent, Cilium
               # and Home Assistant all need privileged/hostNetwork), but
               # warn+audit at baseline surfaces which workloads would fail a
