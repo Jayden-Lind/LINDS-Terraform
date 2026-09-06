@@ -15,9 +15,12 @@
 ###############################################################################
 
 resource "proxmox_storage_directory" "local" {
-  id      = "local"
-  path    = "/var/lib/vz"
-  content = ["snippets", "backup", "iso", "vztmpl"]
+  id   = "local"
+  path = "/var/lib/vz"
+  # "import" lets a cloud image be pulled straight into a VM disk through the
+  # API (proxmox_virtual_environment_download_file + disk.import_from) with no
+  # Packer template or SSH import step. Used by JD-Router-01.
+  content = ["snippets", "backup", "iso", "vztmpl", "import"]
   shared  = false
 }
 

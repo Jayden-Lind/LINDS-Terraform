@@ -16,6 +16,7 @@ and the Talos/Cilium cluster that runs across both.
 | `templates/` | Rendered scripts used by `nfs.tf` |
 | `network.tf` | `vmbr0` / `vmbr1` / `vmbr0.53` |
 | `vms-jd.tf` | JD site guests |
+| `vms-jd-router.tf` | JD-Router-01 (1101), the Debian router replacing JD-VyOS-01; image download + cloud-init snippet |
 | `vms-linds.tf` | LINDS site guests |
 | `modules/talos-node/` | The Talos VM shape, used three times |
 | `talos-schematic.tf` | Image factory schematics (AMD + Intel) |
@@ -88,6 +89,14 @@ anything that runs untrusted code.
 
 **Talos schematic IDs are content hashes.** Reordering `extraKernelArgs`
 changes the installer image reference on every node. Append, do not reshuffle.
+
+**`JD-Router-01` (1101) is the Debian replacement for JD-VyOS-01, built alongside
+it.** Its LAN and WAN NICs are created link-down and a management NIC on VLAN 53
+(10.0.53.250) carries the Ansible build (LINDS-Ansible `roles/router`), so the
+full router config runs without touching the live LAN. The cutover flips the
+three `disconnected` flags; the management NIC is `net0` and stays in the list
+link-down rather than being removed — see the NIC-list note under JD-VyOS-01
+below. `local` storage carries the `import` content type for the qcow2 import.
 
 **`JD-VyOS-01` advertises a guest agent it does not run.** `agent: 1` is set on
 VM 1100 but VyOS never starts `qemu-guest-agent`, so any read of that VM blocks
