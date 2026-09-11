@@ -509,8 +509,16 @@ resource "proxmox_virtual_environment_vm" "jd_jump" {
 
   # As JD-Torrent-01: the clone source is only read at create time, and the
   # provider reports drift against it forever otherwise.
+  #
+  # user_data_file_id likewise: any edit to jump_cloud_config replaces the
+  # snippet, and the provider treats the new file id as forcing replacement of
+  # the whole VM - destroying the disk, the claude.ai login and ~/work. The
+  # guest gains nothing from it anyway, since cloud-init only runs on first
+  # boot. The snippet on the host still updates, so a deliberate rebuild
+  # (`terraform apply -replace=proxmox_virtual_environment_vm.jd_jump`) picks
+  # up the current config; changes that matter now go onto the guest by hand.
   lifecycle {
-    ignore_changes = [clone]
+    ignore_changes = [clone, initialization[0].user_data_file_id]
   }
 }
 
@@ -572,7 +580,15 @@ resource "proxmox_virtual_environment_file" "kube_cloud_config" {
 #     claude          # /login, complete the browser flow
 #     claude-rc start # or just reboot - it is enabled for boot
 #
-# After that the service is self-sufficient across reboots and network drops.
+# After that the service is self-sufficient across reboots and network drops -
+# with one known gap. On 2026-09-11 (claude-code 2.1.268) the server went
+# through a burst of reconnects, logged "Reconnected", then stopped serving
+# for six hours without exiting, so Restart=always never fired. There is no
+# watchdog for this yet: the TUI redraw in the journal also goes quiet on a
+# healthy server, so silence is not a usable liveness signal. `claude-rc
+# debug` (the --debug-file log) is where to look the next time it happens;
+# `claude-rc restart` recovers it, and the adopted sessions reattach.
+#
 # Do not try to bake ~/.claude/.credentials.json or a `claude setup-token`
 # token into this file: it is a long-lived credential to the whole Max account
 # and this repository is on GitHub.
@@ -630,22 +646,29 @@ resource "proxmox_virtual_environment_file" "jump_cloud_config" {
             [Unit]
             Description=Claude Code Remote Control server (unattended)
             Documentation=https://code.claude.com/docs/en/remote-control
-            After=network-online.target
-            Wants=network-online.target
+            # No After=/Wants=network-online.target: the user manager cannot see
+            # system targets, so they were silently no-ops. The server retries
+            # its own connection until the network is up.
+            # Never latch the unit off: before the first /login every start
+            # fails, and it must come up on its own once credentials exist.
+            # [Unit]-only key - under [Service] systemd ignores it with a warning.
+            StartLimitIntervalSec=0
 
             [Service]
             Type=simple
             WorkingDirectory=/home/jayden/work
             Environment=HOME=/home/jayden
             Environment=CLAUDE_REMOTE_CONTROL_SESSION_NAME_PREFIX=jd-jump-01
-            ExecStart=/usr/bin/claude remote-control --permission-mode bypassPermissions
+            # The journal only carries the TUI redraw, which says nothing about
+            # the bridge itself. The debug log records every API call (register,
+            # poll, heartbeat, reconnect), so a wedged server can be diagnosed
+            # after the fact. The previous run's log is kept as .1.
+            ExecStartPre=-/bin/mv -f %h/.claude/remote-control-debug.log %h/.claude/remote-control-debug.log.1
+            ExecStart=/usr/bin/claude remote-control --permission-mode bypassPermissions --debug-file %h/.claude/remote-control-debug.log
             # Server mode exits by design after ~10 min of unreachable network,
             # so a restart is the normal path back, not an error path.
             Restart=always
             RestartSec=10
-            # Never latch the unit off: before the first /login every start
-            # fails, and it must come up on its own once credentials exist.
-            StartLimitIntervalSec=0
             StandardOutput=journal
             StandardError=journal
 
@@ -670,10 +693,11 @@ resource "proxmox_virtual_environment_file" "jump_cloud_config" {
                 ;;
               status)  systemctl --user status "$U" --no-pager ;;
               logs)    journalctl --user -u "$U" -f -o cat ;;
+              debug)   tail -F "$HOME/.claude/remote-control-debug.log" ;;
               restart) systemctl --user restart "$U" && echo restarted ;;
               stop)    systemctl --user stop "$U" && echo stopped ;;
               start)   systemctl --user start "$U" && echo started ;;
-              *) echo "usage: claude-rc {url|status|logs|restart|stop|start}" >&2; exit 2 ;;
+              *) echo "usage: claude-rc {url|status|logs|debug|restart|stop|start}" >&2; exit 2 ;;
             esac
 
         - path: /etc/profile.d/zz-local-bin.sh
