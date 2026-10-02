@@ -211,6 +211,26 @@ locals {
       }
     }
   }
+
+  # Periodic fstrim of the Talos-managed filesystems, a v1.14 feature that is
+  # on for clusters created on v1.14 and off for upgraded ones until this
+  # document exists.
+  #
+  # /var (EPHEMERAL) is mounted without `discard`, and every node's disk is
+  # thin-provisioned: a zvol on ssd-mixed at JD, LVM-thin at LINDS. Nothing
+  # was handing freed blocks back, so each disk only ever grew towards its
+  # 75 G. On 2026-10-03 the two LINDS workers had ~70 G allocated in the thin
+  # pool for 14 G and 24 G in use.
+  #
+  # The VMs already pass discards through (discard=on, ssd=1 in the talos-node
+  # module). A week is what Talos generates for new clusters; each node and
+  # volume gets its own slot inside the interval, so they do not all trim at
+  # once.
+  talos_trim_config = {
+    apiVersion = "v1alpha1"
+    kind       = "FilesystemTrimConfig"
+    interval   = "168h0m0s"
+  }
 }
 
 resource "talos_machine_secrets" "this" {
@@ -263,7 +283,8 @@ resource "talos_machine_configuration_apply" "controlplane" {
 
   config_patches = [
     yamlencode(local.talos_common_config),
-    yamlencode(local.talos_cp_config)
+    yamlencode(local.talos_cp_config),
+    yamlencode(local.talos_trim_config),
   ]
 
   depends_on = [module.talos_cp_jd]
@@ -277,7 +298,10 @@ resource "talos_machine_configuration_apply" "worker" {
   node                        = local.worker_nodes_jd[count.index]
   apply_mode                  = "no_reboot"
 
-  config_patches = [yamlencode(local.talos_common_config)]
+  config_patches = [
+    yamlencode(local.talos_common_config),
+    yamlencode(local.talos_trim_config),
+  ]
 
   depends_on = [module.talos_workers_jd]
 }
@@ -290,7 +314,10 @@ resource "talos_machine_configuration_apply" "worker_linds" {
   node                        = local.worker_nodes_lind[count.index]
   apply_mode                  = "no_reboot"
 
-  config_patches = [yamlencode(local.talos_common_config_linds)]
+  config_patches = [
+    yamlencode(local.talos_common_config_linds),
+    yamlencode(local.talos_trim_config),
+  ]
 
   depends_on = [module.talos_workers_linds]
 }
