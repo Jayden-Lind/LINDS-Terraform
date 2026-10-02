@@ -19,6 +19,23 @@ locals {
   talos_version      = "v1.14.2"
   kubernetes_version = "v1.37.1"
 
+  # Version contract the machine config is *generated* against - which schema
+  # and defaults the provider emits. It is not the installed Talos version and
+  # does not follow talos_version above.
+  #
+  # Left unset it tracks the Talos SDK bundled in the provider, so a provider
+  # upgrade silently regenerates every node's config. Under the v1.14 contract
+  # the base config is split into per-feature documents (UnattendedInstallConfig,
+  # KubeletConfig, ResolverConfig, DiscoveryServiceConfig, ...). Those are
+  # mutually exclusive with the v1alpha1 fields patched in below, and they
+  # default the public discovery service and forwardKubeDNSToHost back on -
+  # both switched off here on purpose.
+  #
+  # v1.13 is what provider 0.11 was emitting, and provider 0.12 pinned to it
+  # renders byte-identical configs for all three node classes. Raise it only
+  # together with a migration of the patches to the new documents.
+  talos_config_contract = "v1.13"
+
   cluster_name     = "talos-cluster"
   cluster_endpoint = "https://10.0.53.200:6443"
 
@@ -190,6 +207,7 @@ data "talos_machine_configuration" "controlplane" {
   machine_type       = "controlplane"
   machine_secrets    = talos_machine_secrets.this.machine_secrets
   kubernetes_version = local.kubernetes_version
+  talos_version      = local.talos_config_contract
 }
 
 data "talos_machine_configuration" "worker" {
@@ -198,6 +216,7 @@ data "talos_machine_configuration" "worker" {
   machine_type       = "worker"
   machine_secrets    = talos_machine_secrets.this.machine_secrets
   kubernetes_version = local.kubernetes_version
+  talos_version      = local.talos_config_contract
 }
 
 data "talos_client_configuration" "this" {
