@@ -87,10 +87,57 @@ sharp edges.
 
 ## Talos
 
+### Applying machine config and Cilium changes
+
+Three targeted applies, in this order:
+
+```shell
+# 1. control plane: machine config, and on a Kubernetes bump the API server,
+#    controller-manager and scheduler
+terraform -chdir=proxmox apply -target=talos_machine_configuration_apply.controlplane
+
+# 2. workers
+terraform -chdir=proxmox apply \
+  -target=talos_machine_configuration_apply.worker \
+  -target=talos_machine_configuration_apply.worker_linds
+
+# 3. Cilium release and its BGP / LB custom resources
+terraform -chdir=proxmox apply \
+  -target=helm_release.cilium -target=null_resource.cilium_bgp_config
+```
+
+Nothing reboots. Steps 1 and 2 restart the kubelet when its image changes, and
+step 1 restarts the control plane pods on a Kubernetes bump, which is why it
+goes first: kubelets must not run ahead of the API server. The targets pull in
+what they depend on — the image factory schematic, the boot ISO and the VMs'
+cdrom — and refresh the `talos_installer_images` output. Step 3 depends on the
+control plane config, so it cannot run before step 1.
+
+Use the targets rather than a bare `terraform apply`. An untargeted apply acts
+on every guest in this module, including whatever else has drifted, and not
+every VM sets `reboot_after_update = false`. Read `terraform plan` first if
+you do want one.
+
+The Cilium agents roll two at a time. Pulling the new images beforehand keeps
+that short, but do it one node at a time on the JD site: the node disks and
+etcd share one pool, and seven nodes pulling at once has stalled etcd long
+enough for Talos to restart the API server.
+
+```shell
+talosctl --nodes 10.0.53.201 image pull --namespace cri quay.io/cilium/cilium:v1.20.2
+```
+
 ### Upgrading the machine image on running nodes
 
 Talos upgrades are in-place via `talosctl upgrade`. The installer image is a
 schematic ID plus a version; both come from Terraform.
+
+Bump `local.talos_version` in `proxmox/talos.tf` and run steps 1 and 2 above
+first. That rewrites the installer reference in each node's config, downloads
+the new boot ISO, and updates the output the next command reads.
+
+Use a `talosctl` from the minor release the cluster is running now (`talosctl
+version` prints both sides), which is what Sidero recommends for upgrades.
 
 ```shell
 cd proxmox/
@@ -132,18 +179,21 @@ so switch it to the other instance before draining its node:
 kubectl cnpg promote linds-postgres <other-instance> -n postgresql-linds
 ```
 
-Then the Kubernetes version: bump `local.kubernetes_version`, apply the control
-plane first so kubelets never run ahead of the API server, then the workers:
+If an upgrade stops at `error pulling upgrade image`, the node could not reach
+the image factory in time and is still on the old version, untouched. Pull the
+installer onto it and run the upgrade again:
 
 ```shell
-terraform -chdir=proxmox apply -target=talos_machine_configuration_apply.controlplane
-terraform -chdir=proxmox apply
+talosctl --nodes $node image pull --namespace system "$AMD"
 ```
+
+Vault is sealed again whenever its pod restarts, which a drain of its node
+does. It needs unsealing by hand afterwards.
 
 To move to a new Talos release, bump `local.talos_version` in
 `proxmox/talos.tf` and re-run the above. Note that the schematic ID is a hash of
-the kernel-arg list in `proxmox/talos-schematic.tf` — reordering that list
-silently changes the image on every node.
+the kernel-arg list in `proxmox/talos-schematic.tf` — changing that list changes
+the image on every node.
 
 ### Destroying Talos VMs
 

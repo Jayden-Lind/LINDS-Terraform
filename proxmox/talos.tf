@@ -12,8 +12,12 @@ locals {
   # image from `terraform output talos_installer_images`. Only after every node
   # runs the new Talos bump kubernetes_version and apply again - control plane
   # first (-target the controlplane apply), then the workers.
-  talos_version      = "v1.14.0"
-  kubernetes_version = "v1.37.0"
+  #
+  # That wait is for a Kubernetes *minor* the running Talos does not support
+  # yet. A patch release of the current minor (v1.37.0 -> v1.37.1 here) can go
+  # in the same apply as the Talos bump; the control plane still goes first.
+  talos_version      = "v1.14.2"
+  kubernetes_version = "v1.37.1"
 
   cluster_name     = "talos-cluster"
   cluster_endpoint = "https://10.0.53.200:6443"
