@@ -12,8 +12,29 @@ locals {
   # image from `terraform output talos_installer_images`. Only after every node
   # runs the new Talos bump kubernetes_version and apply again - control plane
   # first (-target the controlplane apply), then the workers.
-  talos_version      = "v1.14.0"
-  kubernetes_version = "v1.37.0"
+  #
+  # That wait is for a Kubernetes *minor* the running Talos does not support
+  # yet. A patch release of the current minor (v1.37.0 -> v1.37.1 here) can go
+  # in the same apply as the Talos bump; the control plane still goes first.
+  talos_version      = "v1.14.2"
+  kubernetes_version = "v1.37.1"
+
+  # Version contract the machine config is *generated* against - which schema
+  # and defaults the provider emits. It is not the installed Talos version and
+  # does not follow talos_version above.
+  #
+  # Left unset it tracks the Talos SDK bundled in the provider, so a provider
+  # upgrade silently regenerates every node's config. Under the v1.14 contract
+  # the base config is split into per-feature documents (UnattendedInstallConfig,
+  # KubeletConfig, ResolverConfig, DiscoveryServiceConfig, ...). Those are
+  # mutually exclusive with the v1alpha1 fields patched in below, and they
+  # default the public discovery service and forwardKubeDNSToHost back on -
+  # both switched off here on purpose.
+  #
+  # v1.13 is what provider 0.11 was emitting, and provider 0.12 pinned to it
+  # renders byte-identical configs for all three node classes. Raise it only
+  # together with a migration of the patches to the new documents.
+  talos_config_contract = "v1.13"
 
   cluster_name     = "talos-cluster"
   cluster_endpoint = "https://10.0.53.200:6443"
@@ -62,14 +83,32 @@ locals {
         }
       }
       sysctls = {
+        # fq, to agree with Cilium. Its bandwidth manager needs fq under BBR
+        # and EDT pacing and writes this sysctl itself when the agent starts,
+        # so the "noqueue" that used to be here was never the live value -
+        # Talos reported one thing and the kernel ran another. noqueue was
+        # also wrong on its own terms: on a NIC it means packets are dropped,
+        # not queued, whenever the virtio TX ring is full.
+        "net.core.default_qdisc" = "fq"
+        # Talos sets 2 (a KSPP default): constant blinding for every BPF
+        # program, root's included. That rewrites each immediate in Cilium's
+        # datapath into extra instructions, and a blinded program cannot have
+        # its tail calls patched into direct jumps, which Cilium makes several
+        # of per packet. 1 blinds unprivileged loaders only, and unprivileged
+        # BPF stays disabled, so nothing is given up. Talos logs "overriding
+        # KSPP enforced parameter" at boot; that is this line. Programs pick it
+        # up when they are next loaded, i.e. on the next agent restart.
+        "net.core.bpf_jit_harden" = "1"
+
+        # net.ipv4.tcp_rmem is deliberately absent from the list below. The
+        # "4096 87380 16777216" that used to be set is lower than what this
+        # kernel picks for itself (4096 131072 33554432).
         "net.core.somaxconn"              = "65535"
         "net.core.netdev_max_backlog"     = "65535"
         "net.core.rmem_max"               = "16777216"
         "net.core.wmem_max"               = "16777216"
-        "net.core.default_qdisc"          = "noqueue"
         "net.core.busy_poll"              = "50"
         "net.core.busy_read"              = "50"
-        "net.ipv4.tcp_rmem"               = "4096 87380 16777216"
         "net.ipv4.tcp_wmem"               = "4096 65536 16777216"
         "net.ipv4.tcp_max_syn_backlog"    = "65535"
         "net.ipv4.tcp_tw_reuse"           = "1"
@@ -122,7 +161,8 @@ locals {
     }
   }
 
-  # LINDS nodes are Intel Broadwell - separate installer schematic and label.
+  # LINDS nodes are Intel Broadwell. The label differs; the schematic is keyed
+  # separately but currently renders the same image (see talos-schematic.tf).
   talos_common_config_linds = merge(local.talos_common_config, {
     machine = merge(local.talos_common_config.machine, {
       install = {
@@ -171,6 +211,26 @@ locals {
       }
     }
   }
+
+  # Periodic fstrim of the Talos-managed filesystems, a v1.14 feature that is
+  # on for clusters created on v1.14 and off for upgraded ones until this
+  # document exists.
+  #
+  # /var (EPHEMERAL) is mounted without `discard`, and every node's disk is
+  # thin-provisioned: a zvol on ssd-mixed at JD, LVM-thin at LINDS. Nothing
+  # was handing freed blocks back, so each disk only ever grew towards its
+  # 75 G. On 2026-10-03 the two LINDS workers had ~70 G allocated in the thin
+  # pool for 14 G and 24 G in use.
+  #
+  # The VMs already pass discards through (discard=on, ssd=1 in the talos-node
+  # module). A week is what Talos generates for new clusters; each node and
+  # volume gets its own slot inside the interval, so they do not all trim at
+  # once.
+  talos_trim_config = {
+    apiVersion = "v1alpha1"
+    kind       = "FilesystemTrimConfig"
+    interval   = "168h0m0s"
+  }
 }
 
 resource "talos_machine_secrets" "this" {
@@ -186,6 +246,7 @@ data "talos_machine_configuration" "controlplane" {
   machine_type       = "controlplane"
   machine_secrets    = talos_machine_secrets.this.machine_secrets
   kubernetes_version = local.kubernetes_version
+  talos_version      = local.talos_config_contract
 }
 
 data "talos_machine_configuration" "worker" {
@@ -194,6 +255,7 @@ data "talos_machine_configuration" "worker" {
   machine_type       = "worker"
   machine_secrets    = talos_machine_secrets.this.machine_secrets
   kubernetes_version = local.kubernetes_version
+  talos_version      = local.talos_config_contract
 }
 
 data "talos_client_configuration" "this" {
@@ -221,7 +283,8 @@ resource "talos_machine_configuration_apply" "controlplane" {
 
   config_patches = [
     yamlencode(local.talos_common_config),
-    yamlencode(local.talos_cp_config)
+    yamlencode(local.talos_cp_config),
+    yamlencode(local.talos_trim_config),
   ]
 
   depends_on = [module.talos_cp_jd]
@@ -235,7 +298,10 @@ resource "talos_machine_configuration_apply" "worker" {
   node                        = local.worker_nodes_jd[count.index]
   apply_mode                  = "no_reboot"
 
-  config_patches = [yamlencode(local.talos_common_config)]
+  config_patches = [
+    yamlencode(local.talos_common_config),
+    yamlencode(local.talos_trim_config),
+  ]
 
   depends_on = [module.talos_workers_jd]
 }
@@ -248,7 +314,10 @@ resource "talos_machine_configuration_apply" "worker_linds" {
   node                        = local.worker_nodes_lind[count.index]
   apply_mode                  = "no_reboot"
 
-  config_patches = [yamlencode(local.talos_common_config_linds)]
+  config_patches = [
+    yamlencode(local.talos_common_config_linds),
+    yamlencode(local.talos_trim_config),
+  ]
 
   depends_on = [module.talos_workers_linds]
 }

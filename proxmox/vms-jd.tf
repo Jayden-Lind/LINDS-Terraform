@@ -21,7 +21,7 @@ module "talos_cp_jd" {
   datastore_id   = local.datastores.jd
   cores          = 8
   memory         = 16384
-  cpu_flags      = local.guest_cpu_flags
+  cpu_flags      = local.talos_cpu_flags
   vlan_id        = 53
   network_queues = 8
   cdrom_file_id  = proxmox_virtual_environment_download_file.talos_iso_jd.id
@@ -42,7 +42,7 @@ module "talos_workers_jd" {
   datastore_id   = local.datastores.jd
   cores          = 8
   memory         = 16384
-  cpu_flags      = local.guest_cpu_flags
+  cpu_flags      = local.talos_cpu_flags
   vlan_id        = 53
   network_queues = 8
   cdrom_file_id  = proxmox_virtual_environment_download_file.talos_iso_jd.id

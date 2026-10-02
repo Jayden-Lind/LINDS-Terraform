@@ -6,7 +6,7 @@
 ###############################################################################
 
 locals {
-  cilium_version = "1.20.1"
+  cilium_version = "1.20.2"
 
   # BGP: each site peers with its own VyOS router. PodCIDRs, the LoadBalancer
   # pool and ClusterIPs are advertised, so every Service is reachable from the
@@ -39,19 +39,56 @@ locals {
     # node the next time it happens to reboot.
     rollOutCiliumPods    = true
     kubeProxyReplacement = true
+    # Translate Service addresses once, at connect(), in every pod - not only
+    # in the host namespace. hostNamespaceOnly = true leaves pods on the
+    # per-packet path instead: DNAT, conntrack and reverse NAT on each packet
+    # of every pod -> Service connection.
+    #
+    # The price is in one failure case. A TCP connection is pinned to the
+    # backend chosen at connect(), and Cilium only force-closes UDP sockets
+    # when a backend disappears. A pod that exits closes its own connections,
+    # so restarts, rollouts and drains look the same as before; a backend that
+    # vanishes without a FIN (its node dies) leaves its TCP clients waiting on
+    # their own timeouts, where the per-packet path would have reset them.
+    #
+    # The chart forces hostNamespaceOnly to true whenever gatewayAPI.enabled
+    # is set, whatever is written here, so the two have to stay off together.
+    # See the note where gatewayAPI used to be, below.
     socketLB = {
-      enabled = true
-    }
-    loadbalancer = {
-      acceleration = "best-effort"
-      mode         = "hybrid"
+      enabled           = true
+      hostNamespaceOnly = false
     }
     # Honour Service.spec.trafficDistribution (EndpointSlice zone hints) so a
     # linds pod resolving via kube-dns, or hitting any other Service with
     # endpoints at both sites, stays on its own site. Needs the
     # topology.kubernetes.io/zone node label set in talos.tf.
+    #
+    # mode and acceleration are the chart defaults, written out because this
+    # file asked for "hybrid" and "best-effort" from the day Cilium went in and
+    # never got them: they sat under a lower-case `loadbalancer` key, which
+    # Helm ignores. The cluster has always run SNAT with no XDP. Both are the
+    # right answer for this network, so now they are set on purpose.
+    #
+    # snat: under DSR (and hybrid is DSR for TCP) the backend's node answers
+    # the client directly, from the Service address. Inside one site that is
+    # fine. Across sites the forwarded request (client -> pod) and the reply
+    # (Service -> client) both cross the two routers and the IPsec tunnel, but
+    # as unrelated half-connections: the far router is asked to forward a
+    # SYN-ACK for which it never saw a SYN. Whether that survives depends on
+    # each router's firewall staying lenient. SNAT keeps both directions in
+    # one flow on one path.
+    #
+    # disabled: the nodes' NICs are virtio-net, and attaching an XDP program
+    # to virtio-net turns off the guest's receive offloads (rx-gro-hw) for as
+    # long as it stays attached. Those offloads are why traffic from another
+    # VM on the same host, and iSCSI and NFS from the host itself, arrive as
+    # 64 KiB segments rather than 1500-byte frames. XDP would speed up one
+    # thing - forwarding a LAN request on to a backend on another node - and
+    # slow down everything else the NIC receives.
     loadBalancer = {
       serviceTopology = true
+      mode            = "snat"
+      acceleration    = "disabled"
     }
     pmtuDiscovery = {
       enabled = true
@@ -74,11 +111,21 @@ locals {
       }
       hostRoot = "/sys/fs/cgroup"
     }
-    gatewayAPI = {
-      enabled           = true
-      enableAlpn        = true
-      enableAppProtocol = true
-    }
+    # No gatewayAPI block: it was enabled here and never worked. The Gateway
+    # API CRDs are not installed, so the operator logged "Required GatewayAPI
+    # resources are not found" at every start and ran no controller; nothing
+    # in LINDS-Kubernetes uses Gateway API (ingress is the two nginx classes).
+    #
+    # It was not free, though. With gatewayAPI.enabled the 1.20 chart forces
+    # bpf-lb-sock-hostns-only and enable-envoy-config on, and either one
+    # compiles per-packet Service load-balancing into every pod's datapath
+    # (ENABLE_PER_PACKET_LB in bpf_lxc.c). `cilium-dbg status` said so:
+    # "Socket LB Coverage: Hostns-only".
+    #
+    # To use Gateway API later: install its CRDs first, then expect that
+    # switch to come back with it. L7 and FQDN policies do not need it - the
+    # L7 proxy stays enabled (chart default), and with no such policy in the
+    # cluster no Envoy process is even running on the nodes.
     bgpControlPlane = {
       enabled = true
     }
@@ -97,12 +144,43 @@ locals {
     directRoutingSkipUnreachable = true
     bpf = {
       masquerade = true
+      # Per-CPU LRU for the conntrack and NAT maps: no shared lock, but a
+      # map's capacity is split evenly across CPUs and a CPU that runs out
+      # evicts its own entries even while the others sit empty. Upstream says
+      # to raise the map size along with it. At the default ratio (0.0025) a
+      # 16 GiB node gets 146,904 TCP conntrack entries, i.e. 18,363 per CPU on
+      # the 8-vCPU nodes, and the busiest node holds about 10,000 in total.
+      #
+      # Doubling it gives 36,700 per CPU. These are LRU maps, so the memory is
+      # allocated up front whether used or not: bpftool shows 70 MiB for the
+      # five scaled maps at the default, so this costs another 70 MiB a node.
+      # The 0.08 in Cilium's tuning guide would be 2.2 GiB a node, to hold
+      # those same 10,000 entries.
       distributedLRU = {
         enabled = true
       }
+      mapDynamicSizeRatio = 0.005
       enableTCX           = true
       lbExternalClusterIP = true
+      # datapathMode stays at the default, veth. netkit heads Cilium's tuning
+      # guide and the nodes qualify for it, so it was measured here on
+      # 2026-10-03 - the same pods, nodes and software, switched both ways:
+      #
+      #                                        veth          netkit
+      #   worker-01 -> worker-02, Gbit/s       10.98         11.07
+      #     CPU cores busy on both nodes       2.31          2.33
+      #     HTTP requests/s, one connection    6661          6978
+      #   two pods on one node, Gbit/s         17.1-18.2     16.8-18.2
+      #     HTTP requests/s, one connection    10.4k-11.1k   9.9k-10.1k
+      #
+      # Nothing outside run-to-run noise. The hop netkit removes is small next
+      # to the virtio one these nodes pay either way; it is still labelled
+      # beta in 1.20, and an agent set to netkit refuses to start while any
+      # pod on its node is on veth, so switching means rebooting every node.
+      # Worth measuring again if the nodes ever get passthrough NICs.
     }
+    # BIG TCP needs a NIC that can send >64 KiB GSO packets (mlx5, ice).
+    # virtio-net caps tso_max_size at 65536, so there is nothing to enable.
     enableIPv4BIGTCP     = false
     enableIPv4Masquerade = true
     endpointRoutes = {
@@ -321,6 +399,12 @@ resource "helm_release" "cilium" {
   chart      = "cilium"
   namespace  = "kube-system"
   version    = local.cilium_version
+
+  # The agents roll two at a time across seven nodes, and each one rebuilds
+  # its datapath before it reports ready. The default of 300 s has been too
+  # short twice (revisions 32 and 33, "context deadline exceeded"), which
+  # leaves the release marked failed with the rollout still in progress.
+  timeout = 900
 
   values = [yamlencode(local.cilium_values)]
 
