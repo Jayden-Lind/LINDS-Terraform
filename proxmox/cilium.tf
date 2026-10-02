@@ -39,8 +39,24 @@ locals {
     # node the next time it happens to reboot.
     rollOutCiliumPods    = true
     kubeProxyReplacement = true
+    # Translate Service addresses once, at connect(), in every pod - not only
+    # in the host namespace. hostNamespaceOnly = true leaves pods on the
+    # per-packet path instead: DNAT, conntrack and reverse NAT on each packet
+    # of every pod -> Service connection.
+    #
+    # The price is in one failure case. A TCP connection is pinned to the
+    # backend chosen at connect(), and Cilium only force-closes UDP sockets
+    # when a backend disappears. A pod that exits closes its own connections,
+    # so restarts, rollouts and drains look the same as before; a backend that
+    # vanishes without a FIN (its node dies) leaves its TCP clients waiting on
+    # their own timeouts, where the per-packet path would have reset them.
+    #
+    # The chart forces hostNamespaceOnly to true whenever gatewayAPI.enabled
+    # is set, whatever is written here, so the two have to stay off together.
+    # See the note where gatewayAPI used to be, below.
     socketLB = {
-      enabled = true
+      enabled           = true
+      hostNamespaceOnly = false
     }
     # Honour Service.spec.trafficDistribution (EndpointSlice zone hints) so a
     # linds pod resolving via kube-dns, or hitting any other Service with
@@ -95,11 +111,21 @@ locals {
       }
       hostRoot = "/sys/fs/cgroup"
     }
-    gatewayAPI = {
-      enabled           = true
-      enableAlpn        = true
-      enableAppProtocol = true
-    }
+    # No gatewayAPI block: it was enabled here and never worked. The Gateway
+    # API CRDs are not installed, so the operator logged "Required GatewayAPI
+    # resources are not found" at every start and ran no controller; nothing
+    # in LINDS-Kubernetes uses Gateway API (ingress is the two nginx classes).
+    #
+    # It was not free, though. With gatewayAPI.enabled the 1.20 chart forces
+    # bpf-lb-sock-hostns-only and enable-envoy-config on, and either one
+    # compiles per-packet Service load-balancing into every pod's datapath
+    # (ENABLE_PER_PACKET_LB in bpf_lxc.c). `cilium-dbg status` said so:
+    # "Socket LB Coverage: Hostns-only".
+    #
+    # To use Gateway API later: install its CRDs first, then expect that
+    # switch to come back with it. L7 and FQDN policies do not need it - the
+    # L7 proxy stays enabled (chart default), and with no such policy in the
+    # cluster no Envoy process is even running on the nodes.
     bgpControlPlane = {
       enabled = true
     }
