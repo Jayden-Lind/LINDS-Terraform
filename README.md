@@ -146,6 +146,7 @@ terraform output -json talos_installer_images
 
 That prints the exact image reference per CPU vendor — `amd` for the JD nodes
 (EPYC 7B13 / Zen 3), `intel` for the LINDS nodes (Xeon E5 v4 / Broadwell).
+The two are currently the same image; see `proxmox/talos-schematic.tf`.
 
 Workers first, control plane last:
 

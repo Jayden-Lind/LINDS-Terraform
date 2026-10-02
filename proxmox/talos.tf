@@ -143,7 +143,8 @@ locals {
     }
   }
 
-  # LINDS nodes are Intel Broadwell - separate installer schematic and label.
+  # LINDS nodes are Intel Broadwell. The label differs; the schematic is keyed
+  # separately but currently renders the same image (see talos-schematic.tf).
   talos_common_config_linds = merge(local.talos_common_config, {
     machine = merge(local.talos_common_config.machine, {
       install = {
