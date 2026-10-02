@@ -144,12 +144,27 @@ locals {
     directRoutingSkipUnreachable = true
     bpf = {
       masquerade = true
+      # Per-CPU LRU for the conntrack and NAT maps: no shared lock, but a
+      # map's capacity is split evenly across CPUs and a CPU that runs out
+      # evicts its own entries even while the others sit empty. Upstream says
+      # to raise the map size along with it. At the default ratio (0.0025) a
+      # 16 GiB node gets 146,904 TCP conntrack entries, i.e. 18,363 per CPU on
+      # the 8-vCPU nodes, and the busiest node holds about 10,000 in total.
+      #
+      # Doubling it gives 36,700 per CPU. These are LRU maps, so the memory is
+      # allocated up front whether used or not: bpftool shows 70 MiB for the
+      # five scaled maps at the default, so this costs another 70 MiB a node.
+      # The 0.08 in Cilium's tuning guide would be 2.2 GiB a node, to hold
+      # those same 10,000 entries.
       distributedLRU = {
         enabled = true
       }
+      mapDynamicSizeRatio = 0.005
       enableTCX           = true
       lbExternalClusterIP = true
     }
+    # BIG TCP needs a NIC that can send >64 KiB GSO packets (mlx5, ice).
+    # virtio-net caps tso_max_size at 65536, so there is nothing to enable.
     enableIPv4BIGTCP     = false
     enableIPv4Masquerade = true
     endpointRoutes = {
