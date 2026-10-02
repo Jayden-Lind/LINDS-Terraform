@@ -83,14 +83,32 @@ locals {
         }
       }
       sysctls = {
+        # fq, to agree with Cilium. Its bandwidth manager needs fq under BBR
+        # and EDT pacing and writes this sysctl itself when the agent starts,
+        # so the "noqueue" that used to be here was never the live value -
+        # Talos reported one thing and the kernel ran another. noqueue was
+        # also wrong on its own terms: on a NIC it means packets are dropped,
+        # not queued, whenever the virtio TX ring is full.
+        "net.core.default_qdisc" = "fq"
+        # Talos sets 2 (a KSPP default): constant blinding for every BPF
+        # program, root's included. That rewrites each immediate in Cilium's
+        # datapath into extra instructions, and a blinded program cannot have
+        # its tail calls patched into direct jumps, which Cilium makes several
+        # of per packet. 1 blinds unprivileged loaders only, and unprivileged
+        # BPF stays disabled, so nothing is given up. Talos logs "overriding
+        # KSPP enforced parameter" at boot; that is this line. Programs pick it
+        # up when they are next loaded, i.e. on the next agent restart.
+        "net.core.bpf_jit_harden" = "1"
+
+        # net.ipv4.tcp_rmem is deliberately absent from the list below. The
+        # "4096 87380 16777216" that used to be set is lower than what this
+        # kernel picks for itself (4096 131072 33554432).
         "net.core.somaxconn"              = "65535"
         "net.core.netdev_max_backlog"     = "65535"
         "net.core.rmem_max"               = "16777216"
         "net.core.wmem_max"               = "16777216"
-        "net.core.default_qdisc"          = "noqueue"
         "net.core.busy_poll"              = "50"
         "net.core.busy_read"              = "50"
-        "net.ipv4.tcp_rmem"               = "4096 87380 16777216"
         "net.ipv4.tcp_wmem"               = "4096 65536 16777216"
         "net.ipv4.tcp_max_syn_backlog"    = "65535"
         "net.ipv4.tcp_tw_reuse"           = "1"
