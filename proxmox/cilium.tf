@@ -384,6 +384,12 @@ resource "helm_release" "cilium" {
   namespace  = "kube-system"
   version    = local.cilium_version
 
+  # The agents roll two at a time across seven nodes, and each one rebuilds
+  # its datapath before it reports ready. The default of 300 s has been too
+  # short twice (revisions 32 and 33, "context deadline exceeded"), which
+  # leaves the release marked failed with the rollout still in progress.
+  timeout = 900
+
   values = [yamlencode(local.cilium_values)]
 
   depends_on = [talos_cluster_kubeconfig.this]
