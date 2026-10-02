@@ -385,8 +385,13 @@ resource "proxmox_virtual_environment_vm" "jd_torrent" {
     datastore_id = local.datastores.jd
     interface    = "scsi0"
     size         = 16
-    iothread     = true
-    discard      = "ignore"
+    cache        = "none"
+    # Was discard=ignore/ssd=0 on a ZFS-backed SSD pool, so guest TRIM never
+    # reached the zvol and deleted torrent data was never freed. Matches the
+    # other guests on ssd-mixed.
+    discard  = "on"
+    iothread = true
+    ssd      = true
   }
 
   clone {

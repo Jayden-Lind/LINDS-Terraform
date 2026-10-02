@@ -6,9 +6,11 @@
 #   ens5f0np0 -> vmbr1 (WAN, handed to JD-VyOS-01)
 #
 # The ethtool tuning applied to ens5f1np1 in /etc/network/interfaces is not
-# expressible through the Proxmox API; it is reconciled in zfs.tf's host
-# tunables section instead. Notably `gro on lro off tso off` - see the
-# geneve-over-IPsec notes in the repo README.
+# expressible through the Proxmox API and lives only in that file's post-up
+# lines. Offloads are `gro on lro off tso on`: LRO must stay off on a bridging
+# host, but TSO was re-enabled on 2026-09-02 - the geneve-over-IPsec GRO
+# problem noted in cilium.tf was on the VyOS vti/xfrm path, not this NIC, and
+# disabling TSO here only cost host/guest-to-LAN throughput.
 ###############################################################################
 
 resource "proxmox_network_linux_bridge" "lan" {
