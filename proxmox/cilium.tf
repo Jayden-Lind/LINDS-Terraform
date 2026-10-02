@@ -42,16 +42,37 @@ locals {
     socketLB = {
       enabled = true
     }
-    loadbalancer = {
-      acceleration = "best-effort"
-      mode         = "hybrid"
-    }
     # Honour Service.spec.trafficDistribution (EndpointSlice zone hints) so a
     # linds pod resolving via kube-dns, or hitting any other Service with
     # endpoints at both sites, stays on its own site. Needs the
     # topology.kubernetes.io/zone node label set in talos.tf.
+    #
+    # mode and acceleration are the chart defaults, written out because this
+    # file asked for "hybrid" and "best-effort" from the day Cilium went in and
+    # never got them: they sat under a lower-case `loadbalancer` key, which
+    # Helm ignores. The cluster has always run SNAT with no XDP. Both are the
+    # right answer for this network, so now they are set on purpose.
+    #
+    # snat: under DSR (and hybrid is DSR for TCP) the backend's node answers
+    # the client directly, from the Service address. Inside one site that is
+    # fine. Across sites the forwarded request (client -> pod) and the reply
+    # (Service -> client) both cross the two routers and the IPsec tunnel, but
+    # as unrelated half-connections: the far router is asked to forward a
+    # SYN-ACK for which it never saw a SYN. Whether that survives depends on
+    # each router's firewall staying lenient. SNAT keeps both directions in
+    # one flow on one path.
+    #
+    # disabled: the nodes' NICs are virtio-net, and attaching an XDP program
+    # to virtio-net turns off the guest's receive offloads (rx-gro-hw) for as
+    # long as it stays attached. Those offloads are why traffic from another
+    # VM on the same host, and iSCSI and NFS from the host itself, arrive as
+    # 64 KiB segments rather than 1500-byte frames. XDP would speed up one
+    # thing - forwarding a LAN request on to a backend on another node - and
+    # slow down everything else the NIC receives.
     loadBalancer = {
       serviceTopology = true
+      mode            = "snat"
+      acceleration    = "disabled"
     }
     pmtuDiscovery = {
       enabled = true
