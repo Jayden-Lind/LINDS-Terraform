@@ -162,6 +162,22 @@ locals {
       mapDynamicSizeRatio = 0.005
       enableTCX           = true
       lbExternalClusterIP = true
+      # datapathMode stays at the default, veth. netkit heads Cilium's tuning
+      # guide and the nodes qualify for it, so it was measured here on
+      # 2026-10-03 - the same pods, nodes and software, switched both ways:
+      #
+      #                                        veth          netkit
+      #   worker-01 -> worker-02, Gbit/s       10.98         11.07
+      #     CPU cores busy on both nodes       2.31          2.33
+      #     HTTP requests/s, one connection    6661          6978
+      #   two pods on one node, Gbit/s         17.1-18.2     16.8-18.2
+      #     HTTP requests/s, one connection    10.4k-11.1k   9.9k-10.1k
+      #
+      # Nothing outside run-to-run noise. The hop netkit removes is small next
+      # to the virtio one these nodes pay either way; it is still labelled
+      # beta in 1.20, and an agent set to netkit refuses to start while any
+      # pod on its node is on veth, so switching means rebooting every node.
+      # Worth measuring again if the nodes ever get passthrough NICs.
     }
     # BIG TCP needs a NIC that can send >64 KiB GSO packets (mlx5, ice).
     # virtio-net caps tso_max_size at 65536, so there is nothing to enable.
