@@ -179,7 +179,91 @@ locals {
   talos_cp_config = {
     cluster = {
       allowSchedulingOnControlPlanes = true
+      # There is one control plane node, so there is never a second
+      # controller-manager or scheduler to elect against, yet each renewed its
+      # lease every 2s. Lease renewals were 90% of all API writes here (6.4 of
+      # 7.1 a second on 2026-10-04), and etcd turns each one into a WAL fsync
+      # plus a bbolt commit: together they were most of the 58 GiB/day the
+      # control plane VM writes to the SSD pool.
+      #
+      # Set both back to "true" BEFORE adding a second control plane node.
+      # Two unelected controller-managers act on the cluster at the same time.
+      controllerManager = {
+        extraArgs = {
+          "leader-elect" = "false"
+        }
+      }
+      scheduler = {
+        extraArgs = {
+          "leader-elect" = "false"
+        }
+      }
+      # etcd makes a write durable by fsyncing its WAL before it answers. The
+      # bbolt database file is a second copy that it commits afterwards, every
+      # 100ms by default whenever anything changed. With a write arriving every
+      # 200ms or so that was four or five commits a second, each rewriting the
+      # same few pages and fsyncing twice.
+      #
+      # 1s folds those into one commit. Nothing is less durable: after a crash
+      # etcd replays from the WAL whatever the backend had not committed yet,
+      # which is now up to a second of entries instead of a tenth of one.
+      # Reads are unaffected - they see uncommitted writes through etcd's own
+      # read buffer.
+      etcd = {
+        extraArgs = {
+          "backend-batch-interval" = "1s"
+        }
+      }
       apiServer = {
+        # Talos's default policy is one rule, `level: Metadata`, which records
+        # every request twice (received and completed). That was a 100 MB file
+        # every 42 minutes on this disk, 3.4 GiB/day - 17 times what every pod
+        # in the cluster logs put together - and almost all of it was lease
+        # renewals and controllers reading their own objects.
+        #
+        # What is kept is every change to the cluster: who created, updated,
+        # patched or deleted what, and when. The first matching rule wins.
+        # To audit reads of something again (Secrets, say), put a Metadata
+        # rule for it above the get/list/watch rule.
+        auditPolicy = {
+          apiVersion = "audit.k8s.io/v1"
+          kind       = "Policy"
+          omitStages = ["RequestReceived"]
+          rules = [
+            {
+              level = "None"
+              resources = [
+                { group = "coordination.k8s.io", resources = ["leases"] },
+              ]
+            },
+            {
+              level = "None"
+              verbs = ["get", "list", "watch"]
+            },
+            # Events are already a log. Token and access reviews are a
+            # component asking the API server a question, not changing anything.
+            {
+              level = "None"
+              resources = [
+                { group = "", resources = ["events"] },
+                { group = "events.k8s.io", resources = ["events"] },
+                { group = "authentication.k8s.io", resources = ["tokenreviews"] },
+                {
+                  group = "authorization.k8s.io"
+                  resources = [
+                    "subjectaccessreviews",
+                    "selfsubjectaccessreviews",
+                    "selfsubjectrulesreviews",
+                    "localsubjectaccessreviews",
+                  ]
+                },
+              ]
+            },
+            {
+              level = "Metadata"
+            },
+          ]
+        }
         admissionControl = [
           {
             name = "PodSecurity"
