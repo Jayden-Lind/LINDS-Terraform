@@ -195,18 +195,36 @@ locals {
 
     bpfClockProbe = true
 
+    # interval, here and on the operator and Hubble monitors below: the chart
+    # default is 10s, while Prometheus scrapes everything else at 60s. On
+    # 2026-10-04 the agents alone were 1,218 of 4,869 samples/s, and no rule
+    # or dashboard reads a cilium_* or hubble_* series over a range short
+    # enough to need it. Prometheus's TSDB sits on the same SSD pool as etcd.
     prometheus = {
       enabled = true
       serviceMonitor = {
-        enabled = true
+        enabled  = true
+        interval = "60s"
       }
     }
 
     operator = {
+      # Two replicas, so the election stays, but at the defaults (15s lease,
+      # renewed every 2s) the leader wrote its lease to etcd every two
+      # seconds, and lease renewals were 90% of all API writes on this
+      # cluster. Renewed every 15s it is one write in seven. The cost is that
+      # a leader that dies without releasing the lock is replaced after up to
+      # 60s instead of 15s; a clean shutdown still hands over at once.
+      extraArgs = [
+        "--leader-election-lease-duration=60s",
+        "--leader-election-renew-deadline=40s",
+        "--leader-election-retry-period=15s",
+      ]
       prometheus = {
         enabled = true
         serviceMonitor = {
-          enabled = true
+          enabled  = true
+          interval = "60s"
         }
       }
     }
@@ -221,7 +239,8 @@ locals {
         # dropped; dns/drop/tcp/flow/icmp keep the Hubble UI fully functional.
         enabled = ["dns", "drop", "tcp", "flow", "icmp"]
         serviceMonitor = {
-          enabled = true
+          enabled  = true
+          interval = "60s"
         }
       }
       relay = {
