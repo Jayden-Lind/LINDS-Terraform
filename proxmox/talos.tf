@@ -198,6 +198,22 @@ locals {
           "leader-elect" = "false"
         }
       }
+      # etcd makes a write durable by fsyncing its WAL before it answers. The
+      # bbolt database file is a second copy that it commits afterwards, every
+      # 100ms by default whenever anything changed. With a write arriving every
+      # 200ms or so that was four or five commits a second, each rewriting the
+      # same few pages and fsyncing twice.
+      #
+      # 1s folds those into one commit. Nothing is less durable: after a crash
+      # etcd replays from the WAL whatever the backend had not committed yet,
+      # which is now up to a second of entries instead of a tenth of one.
+      # Reads are unaffected - they see uncommitted writes through etcd's own
+      # read buffer.
+      etcd = {
+        extraArgs = {
+          "backend-batch-interval" = "1s"
+        }
+      }
       apiServer = {
         # Talos's default policy is one rule, `level: Metadata`, which records
         # every request twice (received and completed). That was a 100 MB file

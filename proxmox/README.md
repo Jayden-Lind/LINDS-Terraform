@@ -100,6 +100,15 @@ speculative-execution mitigations and most kernel hardening. That is a
 deliberate single-tenant homelab tradeoff; do not lift these files into
 anything that runs untrusted code.
 
+**The control plane is tuned for exactly one node.** `kube-scheduler` and
+`kube-controller-manager` run with `leader-elect=false` (`talos.tf`), because
+lease renewals were 90% of all API writes and each one costs etcd an fsync on
+the SSD pool. Set both back to `true` *before* adding a second control plane
+node. The same block narrows the API audit log to changes only and sets etcd's
+`backend-batch-interval`; that last one is read only when etcd starts, and
+Talos will not restart etcd through its API, so it takes effect at the control
+plane's next reboot.
+
 **Talos schematic IDs are content hashes.** Reordering `extraKernelArgs`
 changes the installer image reference on every node. Append, do not reshuffle.
 
