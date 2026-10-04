@@ -81,6 +81,19 @@ ARC is capped at 64 GiB with a 16 GiB floor; vdev queue depths and dirty-data
 headroom are raised in `/etc/modprobe.d/zfs.conf`. Snapshots are sanoid's job
 (`/etc/sanoid/sanoid.conf`): `VM/truenas-nas` recursive, 24 hourly / 14 daily.
 
+All ten pool drives hang off one Adaptec ASR-81605ZQ (a Series 8 RAID card in
+PCIe slot 9, driver `aacraid`) that passes them through raw. The front bays
+are cabled to it; the board's 16 onboard SATA ports are empty. Two of its
+habits matter for the pools above:
+
+- It does not advertise TRIM for the three `VM` members, all under 2 TiB
+  (`READ CAPACITY(16)` returns `LBPME=0`), so `zpool status -t VM` says "trim
+  unsupported" whatever `autotrim` is set to. The 4 TB drives trim normally.
+- It turns a drive's write cache off after a command abort and the drive
+  stays that way across reboots, which makes an 870 EVO about 14x slower at
+  writes. LINDS-Ansible's `proxmox` role installs
+  `/etc/udev/rules.d/61-drive-write-cache.rules` to turn it back on.
+
 **Mitigations are off everywhere.** Both the guest CPU flags
 (`locals.tf`) and the Talos kernel args (`talos-schematic.tf`) disable
 speculative-execution mitigations and most kernel hardening. That is a
