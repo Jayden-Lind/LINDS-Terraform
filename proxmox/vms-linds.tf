@@ -143,3 +143,98 @@ resource "proxmox_virtual_environment_vm" "linds_torrent" {
     ]
   }
 }
+
+###############################################################################
+# LINDS-DC2 (112) - Windows domain controller, DNS
+#
+# Cloned from the Packer-built Windows Server template (../packer/windows).
+# Terraform's part ends at a running guest with a random name and a DHCP
+# address; LINDS-Ansible (playbooks/windows-build.yml) names it, addresses it,
+# joins it to linds.com.au and promotes it.
+#
+# This replaces VM 110, which was built by hand: it had no OS type set, so it
+# booted with its clock 10-11 hours slow after every cold start, and it had
+# stopped being able to install cumulative updates.
+###############################################################################
+
+resource "proxmox_virtual_environment_vm" "linds_dc2" {
+  provider  = proxmox.linds
+  name      = "LINDS-DC2"
+  vm_id     = 112
+  node_name = local.nodes.linds.name
+
+  # The template carries the QEMU guest agent, and outputs.tf reads the
+  # guest's DHCP address through it.
+  agent {
+    enabled = true
+  }
+
+  cpu {
+    type         = "host"
+    architecture = "x86_64"
+    cores        = 4
+  }
+
+  memory {
+    dedicated = 8192
+    floating  = 0 # ballooning off
+  }
+
+  bios    = "ovmf"
+  machine = "q35"
+  on_boot = true
+
+  # A domain controller. Attribute writes must never restart it behind your
+  # back.
+  reboot_after_update = false
+
+  boot_order    = ["scsi0"]
+  scsi_hardware = "virtio-scsi-single"
+
+  # Not cosmetic: a Windows OS type is what makes Proxmox give the guest a
+  # hardware clock in local time. Without it Windows reads a UTC clock as
+  # local time and comes up hours out, which breaks Kerberos until the time
+  # service steps it.
+  operating_system {
+    type = "win11"
+  }
+
+  startup {
+    order    = "10"
+    up_delay = "30"
+  }
+
+  clone {
+    vm_id = local.windows_template_vm_id
+  }
+
+  # Matches the template: a real EFI variable store with Secure Boot on.
+  efi_disk {
+    datastore_id      = local.datastores.linds
+    type              = "4m"
+    pre_enrolled_keys = true
+  }
+
+  # The template's disk is 60 GB; the clone is grown to this and Windows
+  # extends C: into it on first boot.
+  disk {
+    datastore_id = local.datastores.linds
+    interface    = "scsi0"
+    size         = 100
+    cache        = "none"
+    discard      = "on"
+    iothread     = true
+    ssd          = true
+  }
+
+  network_device {
+    bridge  = "vmbr0"
+    model   = "virtio"
+    vlan_id = 300
+  }
+
+  lifecycle {
+    # The clone source is only read at create time.
+    ignore_changes = [clone]
+  }
+}
