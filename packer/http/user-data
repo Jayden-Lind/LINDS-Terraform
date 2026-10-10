@@ -22,17 +22,13 @@ autoinstall:
   updates: all
   packages:
     - qemu-guest-agent
-    - cloud-initramfs-growroot
+    # growpart, which expand-root-lv.service below runs on every boot.
+    - cloud-guest-utils
   late-commands:
      - curtin in-target -- sudo bash -c "echo uninitialized > /etc/machine-id"
      - curtin in-target -- sudo bash -c "echo uninitialized > /var/lib/dbus/machine-id"
   user-data:
     preserve_hostname: false
-    growpart:
-      mode: auto
-      devices: ["/dev/sda3"]
-      ignore_growroot_disabled: false
-    resize_rootfs: true
     ssh_authorized_keys:
       [
         "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDPWOKxGwpEJ/BU5h71sdPWdnuTgZzx4KRlApHZpoPJUYwDQUHYCXCHsbRrgRUTOuzCJ0Z5HAkDRBUJP8duHgtW7heCv2Emb5HfIbQFierkJnaSwjT68B9JNS8z4w6nNUPViXlPn4IN/hmt2YAWts1i+7xQf0laxyZiHvqm2CQyKUpWYg5KrGgLurZdatDAfEcTgxmVB2OzEH9JREn9pW/9wYIB3dJX5Exvbq8y4ptDiTx2q42DRybHVifIKkAKxOE/pvfTIN++7IKXq6G8uWKefrHLDzdyzpXIg+yqN/uWHb0rWRVe6wmI5EwIlL0jdro/3skbw3bSORDIpZaMWZL+F18HhNW9eW7vKGK2heWzehBlUmmwXJiR3C6qmLiv+lBMvgGB/UZ4eA9x5hvVdQ8WQDJnzdjXhnsmd9yS9btGsm4Gqz+WQGYPHs2GsLMfWlY5TAxM/Qn2Q4SDj7/QHjGsGMYQ+RhHchdjEART8Tiae/+SuA0BZxVPO6QDwLPCYVs= root@jd-dev-01",
@@ -50,19 +46,31 @@ autoinstall:
           [
             "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDPWOKxGwpEJ/BU5h71sdPWdnuTgZzx4KRlApHZpoPJUYwDQUHYCXCHsbRrgRUTOuzCJ0Z5HAkDRBUJP8duHgtW7heCv2Emb5HfIbQFierkJnaSwjT68B9JNS8z4w6nNUPViXlPn4IN/hmt2YAWts1i+7xQf0laxyZiHvqm2CQyKUpWYg5KrGgLurZdatDAfEcTgxmVB2OzEH9JREn9pW/9wYIB3dJX5Exvbq8y4ptDiTx2q42DRybHVifIKkAKxOE/pvfTIN++7IKXq6G8uWKefrHLDzdyzpXIg+yqN/uWHb0rWRVe6wmI5EwIlL0jdro/3skbw3bSORDIpZaMWZL+F18HhNW9eW7vKGK2heWzehBlUmmwXJiR3C6qmLiv+lBMvgGB/UZ4eA9x5hvVdQ8WQDJnzdjXhnsmd9yS9btGsm4Gqz+WQGYPHs2GsLMfWlY5TAxM/Qn2Q4SDj7/QHjGsGMYQ+RhHchdjEART8Tiae/+SuA0BZxVPO6QDwLPCYVs= root@jd-dev-01",
           ]
+    # Grows the root into whatever disk a clone was given. cloud-init cannot do
+    # this itself: the root is an LVM volume, and its growpart module skips
+    # device-mapper roots ("Resizing mapped device ... skipped"), so the unit
+    # does all three steps - partition, PV, then LV and filesystem. A growpart
+    # setting here would not help either; this user-data only reaches the
+    # build's own boot, and clones get theirs from Terraform.
     write_files:
       - path: /etc/systemd/system/expand-root-lv.service
         permissions: "0644"
         content: |
           [Unit]
-          Description=Grow root LV and filesystem to fill VG
-          After=cloud-init-local.service cloud-init.service
-          Requires=cloud-init.service
+          Description=Grow root partition, PV, LV and filesystem to fill the disk
+          # Ordering only, so cloud-init's own resize2fs is not running at the
+          # same time. No Requires=: cloud-init.service became
+          # cloud-init-network.service in 26.04, and requiring a unit that
+          # does not exist stopped this one from ever starting.
+          After=cloud-init-local.service cloud-init-network.service cloud-init.service
           ConditionPathExists=/dev/mapper/ubuntu--vg-ubuntu--lv
 
           [Service]
           Type=oneshot
-          # first make sure the PV now knows its new size
+          # grow partition 3 into the rest of the disk; growpart exits 1 when
+          # there is nothing to grow, which is every boot but the first
+          ExecStartPre=-/usr/bin/growpart /dev/sda 3
+          # then make sure the PV knows its new size
           ExecStartPre=/sbin/pvresize /dev/sda3
           # then grow the LV **and** the filesystem in one step
           ExecStart=/sbin/lvextend -l +100%%FREE --resizefs /dev/mapper/ubuntu--vg-ubuntu--lv
