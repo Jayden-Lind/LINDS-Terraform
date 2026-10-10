@@ -1,0 +1,99 @@
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: ["config:recommended"],
+
+  // Renovate is not run from this repository. One workflow in
+  // LINDS-Kubernetes (.github/workflows/renovate.yaml) runs it for
+  // LINDS-Kubernetes, LINDS-Terraform and LINDS-Ansible; this file is only
+  // the configuration it reads here. The label is the same in all three, so
+  // one search lists every open update:
+  //   https://github.com/pulls?q=is%3Aopen+is%3Apr+user%3AJayden-Lind+label%3Arenovate
+  //
+  // Merging a PR here changes nothing that is running. It lands at the next
+  // `terraform apply` in the directory it touches, and the Talos, Kubernetes
+  // and Cilium bumps each have an order to follow - see the comments beside
+  // the pins.
+  labels: ["renovate"],
+
+  // Legacy vSphere config, kept for reference and never applied.
+  ignorePaths: ["ESXi/**"],
+
+  // The terraform manager finds the providers in every versions.tf and keeps
+  // the .terraform.lock.hcl beside each one in step. The pins below are plain
+  // strings in locals and shell, which it cannot see.
+  customManagers: [
+    {
+      // Talos itself. Bump, apply (machine config only, nothing reboots),
+      // then `talosctl upgrade` node by node - proxmox/talos.tf has the order.
+      customType: "regex",
+      managerFilePatterns: ["/^proxmox/talos\\.tf$/"],
+      matchStrings: ["talos_version\\s*=\\s*\"(?<currentValue>v[0-9.]+)\""],
+      depNameTemplate: "siderolabs/talos",
+      datasourceTemplate: "github-releases",
+    },
+    {
+      // Kubernetes, looked up as the kubelet image Talos actually pulls
+      // rather than as an upstream release, so a version is only offered
+      // once Sidero has built it.
+      //
+      // Renovate CANNOT tell whether the running Talos supports a new
+      // Kubernetes minor. Before merging a minor, check the support matrix
+      // for the Talos version above:
+      //   https://www.talos.dev/latest/introduction/support-matrix/
+      customType: "regex",
+      managerFilePatterns: ["/^proxmox/talos\\.tf$/"],
+      matchStrings: ["kubernetes_version\\s*=\\s*\"(?<currentValue>v[0-9.]+)\""],
+      depNameTemplate: "kubernetes",
+      packageNameTemplate: "ghcr.io/siderolabs/kubelet",
+      datasourceTemplate: "docker",
+    },
+    {
+      // The Cilium chart. helm_release.cilium takes its version from this
+      // local, which the terraform manager does not resolve.
+      customType: "regex",
+      managerFilePatterns: ["/^proxmox/cilium\\.tf$/"],
+      matchStrings: ["cilium_version\\s*=\\s*\"(?<currentValue>[0-9.]+)\""],
+      depNameTemplate: "cilium",
+      registryUrlTemplate: "https://helm.cilium.io",
+      datasourceTemplate: "helm",
+    },
+    {
+      // k9s on the jump box, installed by cloud-init from a pinned release.
+      // cloud-init runs once, so a bump only reaches a VM that is rebuilt.
+      customType: "regex",
+      managerFilePatterns: ["/^proxmox/vms-jd\\.tf$/"],
+      matchStrings: ["K9S=(?<currentValue>v[0-9.]+)"],
+      depNameTemplate: "derailed/k9s",
+      datasourceTemplate: "github-releases",
+    },
+    {
+      // Packer's Proxmox plugin. Renovate has no Packer manager.
+      customType: "regex",
+      managerFilePatterns: ["/^packer/.+\\.pkr\\.hcl$/"],
+      matchStrings: [
+        "version\\s*=\\s*\"(?<currentValue>[^\"]+)\"\\s*source\\s*=\\s*\"github\\.com/(?<org>[^/\"]+)/(?<plugin>[^/\"]+)\"",
+      ],
+      depNameTemplate: "{{{org}}}/packer-plugin-{{{plugin}}}",
+      datasourceTemplate: "github-releases",
+      versioningTemplate: "hashicorp",
+      extractVersionTemplate: "^v(?<version>.+)$",
+    },
+  ],
+
+  // Not tracked: the Ubuntu installer ISO in packer/variables.pkr.hcl. It is
+  // three values that move together (version, URL, checksum) and changes
+  // once every two years.
+
+  packageRules: [
+    {
+      // The root module and modules/talos-node must ask for the same
+      // provider version, and bootstrap/ uses it too.
+      matchPackageNames: ["bpg/proxmox"],
+      groupName: "proxmox provider",
+    },
+  ],
+
+  // A homelab doesn't need 25 PRs in the first hour.
+  prConcurrentLimit: 0,
+  prHourlyLimit: 0,
+}
