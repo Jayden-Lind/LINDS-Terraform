@@ -24,8 +24,8 @@ if ($p.ExitCode -notin 0, 3010) { throw "virtio guest tools exited with $($p.Exi
 Start-Sleep -Seconds 15
 Get-NetConnectionProfile | Set-NetConnectionProfile -NetworkCategory Private
 
-# WinRM over HTTP with Basic authentication: for the build only. seal.ps1
-# makes every clone switch both back off on its first boot.
+# WinRM over HTTP with Basic authentication: for the build only.
+# clone-first-boot.ps1 switches both back off on every clone's first boot.
 Enable-PSRemoting -Force -SkipNetworkProfileCheck
 Set-Item -Path WSMan:\localhost\Service\AllowUnencrypted -Value $true
 Set-Item -Path WSMan:\localhost\Service\Auth\Basic -Value $true

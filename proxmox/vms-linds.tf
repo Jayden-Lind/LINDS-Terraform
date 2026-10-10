@@ -180,8 +180,9 @@ resource "proxmox_virtual_environment_vm" "linds_dc2" {
     floating  = 0 # ballooning off
   }
 
-  bios    = "ovmf"
-  machine = "q35"
+  bios = "ovmf"
+  # Pinned, as the template is: Windows notices when its chipset version moves.
+  machine = "pc-q35-11.0+pve2"
   on_boot = true
 
   # A domain controller. Attribute writes must never restart it behind your

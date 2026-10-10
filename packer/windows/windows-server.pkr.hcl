@@ -12,10 +12,10 @@
 # the small CD that carries Autounattend.xml and the first-logon script.
 #
 # What a clone looks like on first boot: random computer name, DHCP, the local
-# Administrator password given here as admin_password, WinRM listening on 5985
-# for the addresses in winrm_allowed_sources. Everything after that - name,
-# address, domain join, promotion - is Ansible's (LINDS-Ansible,
-# playbooks/windows-build.yml).
+# Administrator password given here as admin_password, and - once Windows setup
+# has finished, not before - WinRM open on 5985 to the addresses in
+# winrm_allowed_sources. Everything after that - name, address, domain join,
+# promotion - is Ansible's (LINDS-Ansible, playbooks/windows-build.yml).
 ###############################################################################
 
 packer {
@@ -122,8 +122,8 @@ source "proxmox-iso" "windows" {
   }
 
   # WinRM over plain HTTP with Basic authentication, for the build only:
-  # bootstrap.ps1 turns it on and seal.ps1 arranges for every clone to turn it
-  # off again on first boot.
+  # bootstrap.ps1 turns it on and clone-first-boot.ps1 turns it off again on
+  # every clone's first boot.
   communicator   = "winrm"
   winrm_username = "Administrator"
   winrm_password = var.admin_password
@@ -143,11 +143,31 @@ build {
   }
 
   provisioner "powershell" {
-    environment_vars = [
-      "CLONE_ADMIN_PASSWORD=${var.admin_password}",
-      "CLONE_TIME_ZONE=${var.time_zone}",
-      "WINRM_ALLOWED_SOURCES=${var.winrm_allowed_sources}",
-    ]
+    inline = ["New-Item -ItemType Directory -Path C:\\Windows\\Setup\\Scripts -Force | Out-Null"]
+  }
+
+  # What a clone needs on its first boot. See the comments in each file.
+  provisioner "file" {
+    content = templatefile("${path.root}/files/clone-unattend.xml.pkrtpl.hcl", {
+      admin_password = var.admin_password
+      time_zone      = var.time_zone
+    })
+    destination = "C:/Windows/Panther/clone-unattend.xml"
+  }
+
+  provisioner "file" {
+    source      = "${path.root}/files/clone-first-boot.ps1"
+    destination = "C:/Windows/Setup/Scripts/clone-first-boot.ps1"
+  }
+
+  provisioner "file" {
+    content = templatefile("${path.root}/files/clone-open-winrm.ps1.pkrtpl.hcl", {
+      allowed_sources = join(", ", [for s in split(",", var.winrm_allowed_sources) : "'${trimspace(s)}'"])
+    })
+    destination = "C:/Windows/Setup/Scripts/clone-open-winrm.ps1"
+  }
+
+  provisioner "powershell" {
     script = "${path.root}/files/seal.ps1"
   }
 }
