@@ -472,8 +472,9 @@ resource "proxmox_virtual_environment_vm" "jd_jump" {
   }
 
   # 64 GiB against the template's 16. The template enables
-  # expand-root-lv.service, so the LV and filesystem grow into the extra space
-  # on first boot without anything being run by hand.
+  # expand-root-lv.service, so the partition, LV and filesystem grow into the
+  # extra space on first boot without anything being run by hand. This VM was
+  # cloned before that unit worked and was grown by hand instead.
   disk {
     datastore_id = local.datastores.jd
     interface    = "scsi0"
