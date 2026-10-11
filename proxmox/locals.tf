@@ -13,6 +13,10 @@ locals {
   # Ubuntu LTS template built by ../packer. Cloned guests reference it by ID.
   ubuntu_template_vm_id = 150
 
+  # Windows Server 2025 template built by ../packer/windows. It exists on the
+  # LINDS node only.
+  windows_template_vm_id = 160
+
   # Default guest datastores per site.
   datastores = {
     jd    = "ssd-mixed" # ZFS raidz1 on VM pool

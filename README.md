@@ -9,7 +9,7 @@ Kubernetes cluster spanning both, and the storage underneath it.
 | --- | --- |
 | [`proxmox/`](proxmox/) | `jd-proxmox-02` end to end (guests, networking, storage, ZFS/NFS) plus the LINDS guests and the Talos/Cilium cluster |
 | [`bootstrap/`](bootstrap/) | The MinIO container that serves the S3 state backend. Separate root module with local state — see below |
-| [`packer/`](packer/) | The Ubuntu LTS template every cloned guest comes from |
+| [`packer/`](packer/) | The Ubuntu LTS template every cloned Linux guest comes from, and in [`packer/windows/`](packer/windows/) the Windows Server template |
 | [`ESXi/`](ESXi/) | Legacy vSphere config, kept for reference; not in active use |
 
 ## Sites
@@ -40,7 +40,8 @@ re-adopts the running container if the state file is ever lost. Read
 
 ## Packer
 
-One build, the current Ubuntu LTS, from a downloaded ISO.
+Two builds: the current Ubuntu LTS from a downloaded ISO, and Windows Server
+(below).
 
 ```shell
 cd packer/
@@ -59,6 +60,69 @@ reference.
 
 Secrets are better passed as `PKR_VAR_proxmox_password` / `PKR_VAR_ssh_password`
 than written into the vars file.
+
+### Windows Server template
+
+`packer/windows/` installs Windows Server unattended on `linds-proxmox-01`,
+adds the VirtIO drivers and the guest agent, runs sysprep and leaves template
+160. `proxmox/vms-linds.tf` clones it; everything after the clone (name,
+address, domain join, promotion) is LINDS-Ansible's
+`playbooks/windows-build.yml`.
+
+Both ISOs have to be on the host's `local` storage first: the Windows Server
+ISO, and `virtio-win-0.1.285.iso` from
+`https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/`. The build
+machine needs `xorriso` (the answer file travels on a generated CD).
+
+```shell
+cd packer/windows/
+cp packer_linds.pkrvars.hcl.example packer_linds.pkrvars.hcl   # then fill it in
+packer init .
+packer build -var-file=packer_linds.pkrvars.hcl .
+```
+
+About 20 minutes. Then, for a server defined in `proxmox/vms-linds.tf`:
+
+```shell
+cd proxmox/
+terraform apply -target=proxmox_virtual_environment_vm.linds_dc2
+terraform output windows_bootstrap_addresses     # the clone's DHCP address
+```
+
+Things that are not obvious from the files:
+
+- **The image is picked by name** (`windows_image_name`), and the name has to
+  match the ISO exactly. `dism /Get-WimInfo /WimFile:<cd>:\sources\install.wim`
+  lists them. The default is the Evaluation ISO's Standard (Desktop
+  Experience). An Evaluation install runs for 180 days and cannot be converted
+  once it is a domain controller, which is why the Ansible build stops before
+  promotion until it has been converted with a product key (`make
+  windows-edition`).
+- **`admin_password` is the clones' local Administrator password** until
+  Ansible has joined them to the domain. It is `vault_windows_bootstrap_password`
+  in LINDS-Ansible (`inventory/group_vars/windows/vault.yml`); the two must
+  match, so rebuild the template if it changes. Letters and digits only: it is
+  written into two answer files.
+- **A clone accepts WinRM only once its setup has finished.** Windows refuses
+  logons during the out-of-box phase and Server 2025 locks Administrator out
+  for ten minutes after ten refusals, so anything polling the port locked
+  itself out. `clone-open-winrm.ps1` opens the firewall when the image state
+  reaches `IMAGE_STATE_COMPLETE`, and only to `winrm_allowed_sources`. The
+  build's own basic-auth, unencrypted WinRM is switched off on the clone's
+  first boot.
+- **`C:` is the last partition on the disk.** Setup adds a recovery partition
+  after `C:` whatever the answer file asks for, and a partition can only grow
+  into free space that follows it: a clone given a 100 GB disk kept a 59 GB
+  `C:`. `os-partition-last.ps1` moves the recovery environment onto `C:` and
+  deletes that partition, so a clone's first boot can extend `C:` over
+  whatever disk Terraform gave it, and so can a later `qm resize`.
+- **The build network needs DHCP and a route back to the machine running
+  Packer** (`build_vlan`, default 300).
+- **Rebuilding the template does not touch existing clones.** They are full
+  clones, and the VM resources ignore changes to `clone`.
+- The template VMID (`template_vm_id`, default 160) must match
+  `windows_template_vm_id` in `proxmox/locals.tf`. An existing template with
+  that ID has to be removed first (`qm destroy 160`).
 
 ## Terraform
 
