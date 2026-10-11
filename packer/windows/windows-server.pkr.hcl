@@ -167,6 +167,11 @@ build {
     destination = "C:/Windows/Setup/Scripts/clone-open-winrm.ps1"
   }
 
+  # So that a clone's C: can grow to the size of its disk.
+  provisioner "powershell" {
+    script = "${path.root}/files/os-partition-last.ps1"
+  }
+
   provisioner "powershell" {
     script = "${path.root}/files/seal.ps1"
   }

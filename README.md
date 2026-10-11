@@ -110,6 +110,12 @@ Things that are not obvious from the files:
   reaches `IMAGE_STATE_COMPLETE`, and only to `winrm_allowed_sources`. The
   build's own basic-auth, unencrypted WinRM is switched off on the clone's
   first boot.
+- **`C:` is the last partition on the disk.** Setup adds a recovery partition
+  after `C:` whatever the answer file asks for, and a partition can only grow
+  into free space that follows it: a clone given a 100 GB disk kept a 59 GB
+  `C:`. `os-partition-last.ps1` moves the recovery environment onto `C:` and
+  deletes that partition, so a clone's first boot can extend `C:` over
+  whatever disk Terraform gave it, and so can a later `qm resize`.
 - **The build network needs DHCP and a route back to the machine running
   Packer** (`build_vlan`, default 300).
 - **Rebuilding the template does not touch existing clones.** They are full
