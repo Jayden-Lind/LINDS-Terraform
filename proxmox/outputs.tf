@@ -32,6 +32,7 @@ output "vm_ids" {
       (proxmox_virtual_environment_vm.linds_plex.name)    = proxmox_virtual_environment_vm.linds_plex.vm_id
       (proxmox_virtual_environment_vm.linds_torrent.name) = proxmox_virtual_environment_vm.linds_torrent.vm_id
       (proxmox_virtual_environment_vm.linds_dc2.name)     = proxmox_virtual_environment_vm.linds_dc2.vm_id
+      (proxmox_virtual_environment_vm.linds_dc.name)      = proxmox_virtual_environment_vm.linds_dc.vm_id
     },
   )
 }
@@ -41,6 +42,10 @@ output "windows_bootstrap_addresses" {
   value = {
     (proxmox_virtual_environment_vm.linds_dc2.name) = [
       for address in flatten(proxmox_virtual_environment_vm.linds_dc2.ipv4_addresses) : address
+      if !startswith(address, "127.") && !startswith(address, "169.254.")
+    ]
+    (proxmox_virtual_environment_vm.linds_dc.name) = [
+      for address in flatten(proxmox_virtual_environment_vm.linds_dc.ipv4_addresses) : address
       if !startswith(address, "127.") && !startswith(address, "169.254.")
     ]
   }
