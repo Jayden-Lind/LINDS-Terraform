@@ -239,3 +239,98 @@ resource "proxmox_virtual_environment_vm" "linds_dc2" {
     ignore_changes = [clone]
   }
 }
+
+# LINDS-DC rebuilt from the Windows template: domain controller, the CA and
+# the LINDS file server. Replaces VM 102 (LINDS-DC-01, built by hand), which
+# is kept switched off as the owner of the NAS disk. The order of the swap is
+# in LINDS-Ansible, docs/windows-domain.md, "replacing a domain controller".
+resource "proxmox_virtual_environment_vm" "linds_dc" {
+  provider  = proxmox.linds
+  name      = "LINDS-DC"
+  vm_id     = 113
+  node_name = local.nodes.linds.name
+
+  # The template carries the QEMU guest agent, and outputs.tf reads the
+  # guest's DHCP address through it.
+  agent {
+    enabled = true
+  }
+
+  cpu {
+    type         = "host"
+    architecture = "x86_64"
+    cores        = 8
+  }
+
+  memory {
+    dedicated = 16384
+    floating  = 0 # ballooning off
+  }
+
+  bios = "ovmf"
+  # Pinned, as the template is: Windows notices when its chipset version moves.
+  machine = "pc-q35-11.0+pve2"
+  on_boot = true
+
+  # A domain controller. Attribute writes must never restart it behind your
+  # back.
+  reboot_after_update = false
+
+  boot_order    = ["scsi0"]
+  scsi_hardware = "virtio-scsi-single"
+
+  # Not cosmetic: a Windows OS type is what makes Proxmox give the guest a
+  # hardware clock in local time. Without it Windows reads a UTC clock as
+  # local time and comes up hours out, which breaks Kerberos until the time
+  # service steps it.
+  operating_system {
+    type = "win11"
+  }
+
+  startup {
+    order    = "10"
+    up_delay = "30"
+  }
+
+  clone {
+    vm_id = local.windows_template_vm_id
+  }
+
+  # Matches the template: a real EFI variable store with Secure Boot on.
+  efi_disk {
+    datastore_id      = local.datastores.linds
+    type              = "4m"
+    pre_enrolled_keys = true
+  }
+
+  # The template's disk is 60 GB; the clone is grown to this and Windows
+  # extends C: into it on first boot.
+  disk {
+    datastore_id = local.datastores.linds
+    interface    = "scsi0"
+    size         = 100
+    cache        = "none"
+    discard      = "on"
+    iothread     = true
+    ssd          = true
+  }
+
+  network_device {
+    bridge  = "vmbr0"
+    model   = "virtio"
+    vlan_id = 300
+  }
+
+  # The NAS data disk is not in this resource, on purpose. It belongs to the
+  # old VM 102 (NAS:vm-102-disk-0), which stays as a switched-off shell, and is
+  # attached to this VM by reference with LINDS-Ansible's
+  # playbooks/windows-data-disk.yml, the way the LINDS-Backup VM already
+  # attaches it. Proxmox only deletes volumes that carry the ID of the VM
+  # being destroyed, so replacing or destroying this VM cannot touch it
+  # (tried on a dummy disk, 2026-10-12). `disk` is ignored so that Terraform
+  # neither detaches it nor tries to resize an 11 TB volume to a round number.
+  lifecycle {
+    # The clone source is only read at create time.
+    ignore_changes = [clone, disk]
+  }
+}
