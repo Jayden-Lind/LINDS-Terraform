@@ -6,7 +6,9 @@
 # datacenter=linds so Cilium peers them with the LINDS router (ASN 64513).
 #
 # NOTE: this host is currently out of scope for reconciliation work - only the
-# guests below are managed, not its storage or networking.
+# guests below are managed, not its storage or networking. (One exception:
+# the content types of its `local` storage, which LINDS-Router-01 needs; see
+# vms-linds-router.tf.)
 ###############################################################################
 
 module "talos_workers_linds" {
