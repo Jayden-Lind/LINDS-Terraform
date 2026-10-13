@@ -6,11 +6,10 @@
 #   * Debian genericcloud image imported straight into the disk through the
 #     API (disk.import_from is create-only, so a refreshed image never touches
 #     the running guest).
-#   * Built beside the router it replaces. A management NIC on VLAN 300
-#     (10.3.1.250, gateway LINDS-VyOS at 10.3.1.1) carries the Ansible build,
-#     and the LAN and WAN NICs are created link-down, so the guest runs its
-#     whole router config without a frame of it reaching the live LAN or the
-#     NBN port.
+#   * Built beside the router it replaced. A management NIC on VLAN 300
+#     (10.3.1.250, gateway LINDS-VyOS at 10.3.1.1) carried the Ansible build
+#     with the LAN and WAN NICs link-down; the cutover swapped the three
+#     links, and that is how they are recorded below.
 #   * Both data NICs are virtio: vmbr0 (eno2, the LAN trunk, every VLAN) and
 #     vmbr1 (eno1, the WAN). There is no SR-IOV here.
 #
@@ -156,16 +155,17 @@ resource "proxmox_virtual_environment_vm" "linds_router" {
     user_data_file_id = proxmox_virtual_environment_file.linds_router_cloud_config.id
   }
 
-  # net0 - management, VLAN 300 (servers), for the build only. At cutover it
-  # goes link-down in the same step that brings net1 and net2 up: the guest's
-  # own lan0.300 then holds 10.3.1.1 on this very network.
+  # net0 - management, VLAN 300 (servers): what the router was built through.
+  # Link-down since the cutover (the guest's own lan0.300 holds 10.3.1.1 on
+  # this very network) and kept in the list rather than removed, so the two
+  # NICs below keep their numbers. A rollback to LINDS-VyOS brings it back up.
   network_device {
     bridge       = "vmbr0"
     model        = "virtio"
     mac_address  = "BC:24:11:06:01:00"
     vlan_id      = 300
     firewall     = false
-    disconnected = false
+    disconnected = true # since the cutover; see lifecycle
   }
 
   # net1 - LAN trunk. No vlan_id: untagged 192.168.6.0/24 plus tagged
@@ -176,7 +176,7 @@ resource "proxmox_virtual_environment_vm" "linds_router" {
     mac_address  = "BC:24:11:06:01:01"
     queues       = 4
     firewall     = false
-    disconnected = true # as created; see lifecycle
+    disconnected = false # since the cutover; see lifecycle
   }
 
   # net2 - WAN (vmbr1 = eno1, the NBN port), as LINDS-VyOS's net1.
@@ -186,7 +186,7 @@ resource "proxmox_virtual_environment_vm" "linds_router" {
     mac_address  = "BC:24:11:06:01:02"
     queues       = 4
     firewall     = false
-    disconnected = true # as created; see lifecycle
+    disconnected = false # since the cutover; see lifecycle
   }
 
   operating_system {
@@ -194,16 +194,14 @@ resource "proxmox_virtual_environment_vm" "linds_router" {
   }
 
   lifecycle {
-    # Off until cutover so the build can be torn down and redone. Flip it
-    # when this becomes the router.
-    prevent_destroy = false
+    # The site's router: never destroyed by an apply.
+    prevent_destroy = true
     ignore_changes = [
       # The image is only read at create time.
       disk[0].import_from,
-      # Which links are up is the cutover's to decide, on the host, with a
-      # rollback (linds-router-cutover). The values above are how the VM is
-      # created; without this, an apply after the swap would quietly take
-      # the site's LAN and WAN down again to match them.
+      # Which links are up was the cutover's to decide, on the host, with a
+      # rollback (linds-router-cutover), and still is. The values above
+      # record how the cutover left them; they are not enforced.
       network_device[0].disconnected,
       network_device[1].disconnected,
       network_device[2].disconnected,
