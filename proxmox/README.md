@@ -18,6 +18,7 @@ and the Talos/Cilium cluster that runs across both.
 | `vms-jd.tf` | JD site guests |
 | `vms-jd-router.tf` | JD-Router-01 (1101), the Debian router replacing JD-VyOS-01; image download + cloud-init snippet |
 | `vms-linds.tf` | LINDS site guests |
+| `vms-linds-router.tf` | LINDS-Router-01 (114), the Debian router replacing LINDS-VyOS; the `local` storage's content types on that host, image download + cloud-init snippet |
 | `modules/talos-node/` | The Talos VM shape, used three times |
 | `talos-schematic.tf` | Image factory schematics (AMD + Intel) |
 | `talos.tf` | Machine config, bootstrap, kubeconfig |
@@ -119,6 +120,24 @@ full router config runs without touching the live LAN. The cutover flips the
 three `disconnected` flags; the management NIC is `net0` and stays in the list
 link-down rather than being removed — see the NIC-list note under JD-VyOS-01
 below. `local` storage carries the `import` content type for the qcow2 import.
+
+**`LINDS-Router-01` (114) is built the same way, beside LINDS-VyOS (VM 101).**
+Management NIC on VLAN 300 (10.3.1.250), LAN and WAN NICs link-down, built by
+LINDS-Ansible `roles/router` with `--limit linds-router-01`. Three things
+differ from JD's:
+
+- VM 101 was made by hand and is in no state, so the swap is not an apply. It
+  is `qm` on the host (LINDS-Ansible `roles/router/cutover/linds-router-cutover`:
+  VyOS off, the three links flipped, the new router rebooted, and a rollback
+  that can fire on a timer). Terraform creates the NICs with the build's
+  link states and then ignores `disconnected` (`ignore_changes`), so an apply
+  after the swap cannot take the site's LAN and WAN down to match the file.
+  Branch `proxmox/linds-router-after-cutover` updates the values for the
+  reader and turns `prevent_destroy` on.
+- `vms-linds-router.tf` adopts linds-proxmox-01's `local` storage with an
+  `import` block to add the `import` and `snippets` content types. It is the
+  one piece of that host's storage this module manages.
+- Both data NICs are virtio; there is no SR-IOV at LINDS.
 
 **`JD-VyOS-01` advertises a guest agent it does not run.** `agent: 1` is set on
 VM 1100 but VyOS never starts `qemu-guest-agent`, so any read of that VM blocks
