@@ -11,11 +11,9 @@ import {
   id = "jd-proxmox-02/107"
 }
 
-# LXC 106 (jd-minio-01) held the buckets until 2026-10-17. It is kept stopped
-# (onboot off) on a spare address, 10.0.53.61 with a new MAC, since versitygw
-# has its old ones, as a fallback for a week; then it is deleted by hand.
-# Forget it here rather than destroy it, so an old local state file cannot
-# plan a destroy.
+# LXC 106 (jd-minio-01) held the buckets until 2026-10-17 and was deleted by
+# hand the same day, once versitygw was verified. Forget it rather than
+# destroy it, so an old local state file plans nothing for it.
 removed {
   from = proxmox_virtual_environment_container.minio
 
