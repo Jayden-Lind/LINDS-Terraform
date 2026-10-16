@@ -24,14 +24,14 @@ variable "proxmox_password" {
   sensitive   = true
 }
 
-variable "minio_root_user" {
-  description = "MinIO root user. Must match the access_key in ../proxmox/backend.conf."
+variable "s3_root_access_key" {
+  description = "versitygw root access key (ROOT_ACCESS_KEY_ID). Admin only; the clients have their own accounts."
   type        = string
   sensitive   = true
 }
 
-variable "minio_root_password" {
-  description = "MinIO root password. Must match the secret_key in ../proxmox/backend.conf."
+variable "s3_root_secret_key" {
+  description = "versitygw root secret key (ROOT_SECRET_ACCESS_KEY)."
   type        = string
   sensitive   = true
 }

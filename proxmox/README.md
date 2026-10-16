@@ -46,8 +46,11 @@ Username/password still works if the token is left unset.
 
 ## Things worth knowing
 
-**State lives in MinIO, which runs on the host this module manages.** The MinIO
-container is therefore *not* managed here — see [`../bootstrap`](../bootstrap).
+**State lives in versitygw (`jd-s3-01`), which runs on the host this module
+manages.** That container is therefore *not* managed here — see
+[`../bootstrap`](../bootstrap). The backend uses S3-native locking
+(`use_lockfile`), so a second `plan`/`apply` waits for, or fails on, the
+first one's lock.
 
 **ZFS is not managed by Terraform.** Deliberately. The pools hold live data,
 they were built by hand, and no provider can touch them safely — so nothing in
@@ -72,7 +75,7 @@ the host, not from here:
 | --- | --- |
 | `VM` | `compression=zstd atime=off xattr=sa` |
 | `VM/truenas-nas` | `mountpoint=/mnt/NAS recordsize=1M compression=zstd atime=off acltype=posix` |
-| `VM/truenas-nas/minio` | inherits — backs the MinIO LXC, i.e. this repo's tfstate |
+| `VM/truenas-nas/s3` | `recordsize=1M` — backs the versitygw LXC (107), i.e. this repo's tfstate; objects are plain files |
 | `VM/truenas-nas/k8s-iscsi{,/s,/v}` | inherits — democratic-csi owns everything below |
 | `NAS-SSD` | `compression=zstd atime=off` |
 | `HDD-20T` | `mountpoint=/HDD-20T recordsize=1M compression=off atime=off primarycache=metadata logbias=throughput sync=disabled` |
@@ -80,7 +83,7 @@ the host, not from here:
 
 ARC is capped at 64 GiB with a 16 GiB floor; vdev queue depths and dirty-data
 headroom are raised in `/etc/modprobe.d/zfs.conf`. Snapshots are sanoid's job
-(`/etc/sanoid/sanoid.conf`): `VM/truenas-nas` recursive, 24 hourly / 14 daily.
+(`/etc/sanoid/sanoid.conf`): `VM/truenas-nas` recursive, 14 daily, no hourlies.
 
 All ten pool drives hang off one Adaptec ASR-81605ZQ (a Series 8 RAID card in
 PCIe slot 9, driver `aacraid`) that passes them through raw. The front bays

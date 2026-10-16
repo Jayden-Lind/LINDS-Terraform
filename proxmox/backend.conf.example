@@ -1,3 +1,4 @@
-access_key = "minioadmin"
-secret_key = "minioadmin"
-
+# The `terraform` account on jd-s3-01 (versitygw), owner of the tfstate bucket.
+# See ../bootstrap/README.md.
+access_key = "terraform"
+secret_key = "xxx"
