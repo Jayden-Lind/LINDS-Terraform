@@ -9,10 +9,11 @@
   // one search lists every open update:
   //   https://github.com/pulls?q=is%3Aopen+is%3Apr+user%3AJayden-Lind+label%3Arenovate
   //
-  // Merging a PR here changes nothing that is running. It lands at the next
-  // `terraform apply` in the directory it touches, and the Talos, Kubernetes
-  // and Cilium bumps each have an order to follow - see the comments beside
-  // the pins.
+  // Merging a Talos, Kubernetes or Cilium bump here deploys it: within about
+  // five minutes the timer in deploy/ applies it to the cluster, in the order
+  // the comments beside the pins give. A Talos bump reboots every node, one at
+  // a time. Anything else lands at the next manual `terraform apply` in the
+  // directory it touches.
   labels: ["renovate"],
 
   // Legacy vSphere config, kept for reference and never applied.
@@ -23,8 +24,9 @@
   // strings in locals and shell, which it cannot see.
   customManagers: [
     {
-      // Talos itself. Bump, apply (machine config only, nothing reboots),
-      // then `talosctl upgrade` node by node - proxmox/talos.tf has the order.
+      // Talos itself. The deploy applies the machine configs (nothing
+      // reboots), then runs `talosctl upgrade` node by node - proxmox/talos.tf
+      // has the order.
       customType: "regex",
       managerFilePatterns: ["/^proxmox/talos\\.tf$/"],
       matchStrings: ["talos_version\\s*=\\s*\"(?<currentValue>v[0-9.]+)\""],
@@ -37,8 +39,9 @@
       // once Sidero has built it.
       //
       // Renovate CANNOT tell whether the running Talos supports a new
-      // Kubernetes minor. Before merging a minor, check the support matrix
-      // for the Talos version above:
+      // Kubernetes minor, and the deploy does not check either: merging is
+      // deploying. Before merging a minor, check the support matrix for the
+      // Talos version above:
       //   https://www.talos.dev/latest/introduction/support-matrix/
       customType: "regex",
       managerFilePatterns: ["/^proxmox/talos\\.tf$/"],
@@ -85,6 +88,13 @@
   // once every two years.
 
   packageRules: [
+    {
+      // Said on each of these PRs, where it is read at merge time.
+      matchDepNames: ["siderolabs/talos", "kubernetes", "cilium"],
+      prBodyNotes: [
+        "Merging this deploys it: within about five minutes, the deploy timer on jd-jump-01 applies it to the cluster (deploy/README.md). A Talos bump reboots every node, one at a time.",
+      ],
+    },
     {
       // The root module and modules/talos-node must ask for the same
       // provider version, and bootstrap/ uses it too.
