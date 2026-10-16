@@ -5,7 +5,7 @@ Description=Apply LINDS-Terraform main to the Talos cluster (deploy/README.md)
 Type=oneshot
 ExecStart=%h/.local/state/linds-tf-deploy/repo/deploy/linds-tf-deploy
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
-# A Talos upgrade of all seven nodes takes about an hour.
+# A Talos bump upgrades seven nodes in turn, each drained, rebooted and waited on.
 TimeoutStartSec=4h
 # Terraform and its providers need well under this. The cap keeps an OOM kill
 # inside this unit.
