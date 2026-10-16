@@ -7,7 +7,8 @@
 ###############################################################################
 
 locals {
-  # Upgrade order: bump talos_version, `terraform apply` (machine config only -
+  # Upgrade order, which deploy/linds-tf-deploy follows on every merge to main:
+  # bump talos_version, `terraform apply` (machine config only -
   # nothing reboots), then `talosctl upgrade` node by node with the installer
   # image from `terraform output talos_installer_images`. Only after every node
   # runs the new Talos bump kubernetes_version and apply again - control plane

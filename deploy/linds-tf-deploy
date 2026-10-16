@@ -1,0 +1,677 @@
+#!/usr/bin/env bash
+#
+# linds-tf-deploy: applies what is merged to main under proxmox/ to the running
+# cluster - the Talos machine configs, the Talos OS on each node and the Cilium
+# release - in the order the README's Talos section sets out, and nothing else.
+# A plan that would change anything outside that stops the deploy before it
+# applies. deploy/README.md has the why and the how.
+#
+#   linds-tf-deploy                      deploy origin/main, if not done already
+#   linds-tf-deploy --dry-run            plan and print what it would do
+#   linds-tf-deploy --dry-run --ref REF  the same for another branch or commit
+#   linds-tf-deploy --retry              deploy again a commit whose deploy failed
+#
+# Optional settings:
+#   LINDS_TF_DEPLOY_STATE           state, clone and caches (~/.local/state/linds-tf-deploy)
+#   LINDS_TF_DEPLOY_TFVARS          (~/LINDS-Terraform/proxmox/terraform.tfvars)
+#   LINDS_TF_DEPLOY_BACKEND_CONFIG  (~/LINDS-Terraform/proxmox/backend.conf)
+
+set -euo pipefail
+shopt -s inherit_errexit
+
+PATH=$HOME/.local/bin:$PATH
+
+state_dir=${LINDS_TF_DEPLOY_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/linds-tf-deploy}
+tfvars=${LINDS_TF_DEPLOY_TFVARS:-$HOME/LINDS-Terraform/proxmox/terraform.tfvars}
+backend_config=${LINDS_TF_DEPLOY_BACKEND_CONFIG:-$HOME/LINDS-Terraform/proxmox/backend.conf}
+
+repo_url=https://github.com/Jayden-Lind/LINDS-Terraform.git
+github_repo=Jayden-Lind/LINDS-Terraform
+status_context=deploy/proxmox
+repo=$state_dir/repo
+
+# talos.tf gives the JD nodes the "amd" schematic and the LINDS nodes the
+# "intel" one; the nodes carry their site as the `datacenter` label.
+declare -A installer_key=([jd]=amd [linds]=intel)
+
+pg_namespace=postgresql-linds
+pg_cluster=linds-postgres
+alertmanager=(--namespace monitoring alertmanager-monitoring-kube-prometheus-alertmanager-0 --container alertmanager)
+vault_pod=(--namespace vault vault-0)
+
+# What a plan may contain. A rule is an address pattern, the action lists
+# allowed for it and, for some updates, the only attributes the update may
+# change. Anything else in a plan stops the deploy before it applies; apply it
+# by hand, or add a rule here if the deploy should make that change itself.
+#
+# The Talos VMs may only have their cdrom changed (the boot ISO a Talos bump
+# downloads). Any other in-place change to a running VM is out: a NIC change,
+# for one, hot-unplugs the NIC from the running node.
+read -r -d '' guard <<'JQ' || true
+def rules: [
+  {re: "^talos_machine_configuration_apply\\.(controlplane|worker|worker_linds)(\\[[0-9]+\\])?$",
+   actions: [["update"]]},
+  {re: "^talos_image_factory_schematic\\.this\\[\"(amd|intel)\"\\]$",
+   actions: [["create"], ["delete", "create"], ["create", "delete"]]},
+  {re: "^proxmox_virtual_environment_download_file\\.talos_iso_(jd|linds)$",
+   actions: [["create"], ["delete", "create"], ["create", "delete"]]},
+  {re: "^module\\.talos_(cp_jd|workers_jd|workers_linds)\\.proxmox_virtual_environment_vm\\.this\\[\"[^\"]+\"\\]$",
+   actions: [["update"]], only: ["cdrom"]},
+  {re: "^helm_release\\.cilium$",
+   actions: [["update"]]},
+  {re: "^null_resource\\.cilium_bgp_config$",
+   actions: [["create"], ["delete", "create"]]},
+  {re: "^local_file\\.(kubeconfig|talosconfig)$",
+   actions: [["create"], ["update"], ["delete", "create"]]},
+  {re: "^talos_cluster_kubeconfig\\.this$",
+   actions: [["update"], ["delete", "create"]]}
+];
+
+def changed_attributes:
+  (.change.before // {}) as $b | (.change.after // {}) as $a | (.change.after_unknown // {}) as $u
+  | [($b | keys[]), ($a | keys[])] | unique
+  | map(select($b[.] != $a[.] or ([$u[.] | .. | select(. == true)] | length > 0)));
+
+if .errored then "the plan did not complete" else
+  (.resource_changes // [])[]
+  | select(.change.actions != ["no-op"] and .change.actions != ["read"])
+  | . as $rc
+  | ([rules[] | select(.re as $re | $rc.address | test($re))] | first) as $rule
+  | if $rule == null or ([$rule.actions[] | select(. == $rc.change.actions)] | length) == 0 then
+      "\($rc.address) (\($rc.change.actions | join("/")))"
+    elif $rule.only and ((($rc | changed_attributes) - $rule.only) | length) > 0 then
+      "\($rc.address) (changes \((($rc | changed_attributes) - $rule.only) | join(", ")))"
+    else empty end
+end
+JQ
+
+read -r -d '' list_changes <<'JQ' || true
+(.resource_changes // [])[]
+| select(.change.actions != ["no-op"] and .change.actions != ["read"])
+| "\(.change.actions | join("/")) \(.address)"
+JQ
+
+usage() {
+  cat <<'EOF'
+Usage: linds-tf-deploy [--dry-run [--ref REF]] [--retry]
+
+  (no options)   deploy origin/main, if it has not been deployed yet
+  --dry-run      plan and print what a deploy would do; change nothing
+  --ref REF      with --dry-run: a branch or commit instead of origin/main
+  --retry        deploy again a commit whose deploy failed
+
+See deploy/README.md in LINDS-Terraform.
+EOF
+}
+
+log() { printf '%s\n' "$*"; }
+
+join() { # ITEM... -> "a, b, c"
+  local out=$1 item
+  shift
+  for item; do out+=", $item"; done
+  printf '%s' "$out"
+}
+
+# Records why the deploy stopped, then exits; the EXIT trap reports it. The
+# message goes through a file because fail can run inside $(...).
+fail() {
+  [[ -z ${run_dir:-} ]] || printf '%s\n' "$*" > "$run_dir/failure"
+  exit 1
+}
+
+read_state() { cat -- "$state_dir/$1" 2>/dev/null || true; }
+
+tf() { terraform -chdir="$repo/proxmox" "$@"; }
+talos() { "$talosctl" "$@"; }
+
+# API calls give up instead of hanging while the control plane reboots.
+kubectl() { command kubectl --request-timeout=30s "$@"; }
+
+# Plans need the state lock, except in a dry run, which only reads.
+lock_args() { if $dry_run; then echo -lock=false; else echo -lock-timeout=10m; fi; }
+
+github_status() { # STATE DESCRIPTION
+  $dry_run && return 0
+  gh api --method POST "repos/$github_repo/statuses/$sha" \
+    -f state="$1" -f context="$status_context" -f description="${2:0:140}" > /dev/null 2>&1 ||
+    log "warning: could not set the commit status on GitHub"
+}
+
+# The failure alert goes to Alertmanager, which sends it to Discord. It is
+# raised with an end time 20 minutes out and raised again on every timer run
+# while the failure stands, so it resolves on its own once a deploy succeeds.
+raise_alert() { # SUMMARY
+  [[ -s $state_dir/kubeconfig ]] || return 0
+  KUBECONFIG=$state_dir/kubeconfig kubectl exec "${alertmanager[@]}" -- \
+    amtool --alertmanager.url=http://localhost:9093 alert add \
+    alertname=LindsTerraformDeployFailed severity=warning \
+    --annotation=summary="LINDS-Terraform deploy of ${1:0:500}" \
+    --end="$(date -u -d '+20 minutes' +%Y-%m-%dT%H:%M:%SZ)" > /dev/null 2>&1 ||
+    log "warning: could not raise the alert in Alertmanager"
+}
+
+# --- the cluster ------------------------------------------------------------
+
+# One line per node, in upgrade order: JD workers, LINDS workers, then the
+# control plane. Fields: name, address, site, role.
+node_list() {
+  kubectl get nodes -o json | jq -r '
+    .items[]
+    | [ (if .metadata.labels | has("node-role.kubernetes.io/control-plane") then 1 else 0 end),
+        (.metadata.labels.datacenter // "unknown"),
+        ([.status.addresses[] | select(.type == "InternalIP") | .address] | first),
+        .metadata.name ]
+    | @tsv' |
+    sort -t $'\t' -k1,1n -k2,2 -k3,3V |
+    awk -F '\t' '{ print $4, $3, $2, ($1 == 1 ? "controlplane" : "worker") }'
+}
+
+talos_version_of() {
+  timeout 30 "$talosctl" --nodes "$1" version --short 2> /dev/null | awk '$1 == "Tag:" { print $2 }' || true
+}
+
+schematic_of() {
+  timeout 30 "$talosctl" --nodes "$1" get extensions -o json 2> /dev/null |
+    jq -r 'select(.spec.metadata.name == "schematic") | .spec.metadata.version' || true
+}
+
+node_ready() {
+  [[ $(kubectl get node "$1" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2> /dev/null || true) == True ]]
+}
+
+# Prints what is wrong with the cluster; prints nothing when it is healthy.
+cluster_problems() {
+  local nodes ds pg
+  if ! kubectl get --raw=/readyz > /dev/null 2>&1; then
+    echo "the Kubernetes API is not ready"
+    return 0
+  fi
+  nodes=$(kubectl get nodes -o json 2> /dev/null) || { echo "cannot list the nodes"; return 0; }
+  jq -r '.items[]
+    | (select(any(.status.conditions[]; .type == "Ready" and .status == "True") | not) | "\(.metadata.name) is not Ready"),
+      (select(.spec.unschedulable == true) | "\(.metadata.name) is cordoned")' <<< "$nodes"
+  ds=$(kubectl --namespace kube-system get daemonset cilium -o json 2> /dev/null) || { echo "cannot read the cilium DaemonSet"; return 0; }
+  jq -r '.status
+    | select(.numberReady != .desiredNumberScheduled or (.updatedNumberScheduled // 0) != .desiredNumberScheduled)
+    | "cilium: \(.numberReady) of \(.desiredNumberScheduled) agents ready, \(.updatedNumberScheduled // 0) up to date"' <<< "$ds"
+  pg=$(kubectl --namespace "$pg_namespace" get clusters.postgresql.cnpg.io "$pg_cluster" -o json 2> /dev/null) ||
+    { echo "cannot read the Postgres cluster"; return 0; }
+  jq -r 'select(.status.phase != "Cluster in healthy state" or .status.readyInstances != .spec.instances)
+    | "postgres: \(.status.phase), \(.status.readyInstances) of \(.spec.instances) instances ready"' <<< "$pg"
+}
+
+wait_healthy() { # WHEN [SECONDS]
+  local deadline=$((SECONDS + ${2:-900})) problems
+  problems=$(cluster_problems)
+  while [[ -n $problems ]]; do
+    if ((SECONDS >= deadline)); then
+      fail "Cluster not healthy $1: ${problems//$'\n'/; }"
+    fi
+    sleep 15
+    problems=$(cluster_problems)
+  done
+}
+
+# --- tools ------------------------------------------------------------------
+
+# A talosctl of the release the control plane runs, as Sidero recommends for
+# upgrades (the one on PATH may be older than the cluster).
+get_talosctl() { # VERSION
+  talosctl=$state_dir/bin/talosctl-$1
+  [[ -x $talosctl ]] && return 0
+  local base=https://github.com/siderolabs/talos/releases/download/$1 dir
+  dir=$(mktemp -d "$run_dir/talosctl.XXXXXX")
+  curl -fsSL -o "$dir/talosctl-linux-amd64" "$base/talosctl-linux-amd64"
+  curl -fsSL -o "$dir/sha256sum.txt" "$base/sha256sum.txt"
+  (cd "$dir" && grep -E ' \*?talosctl-linux-amd64$' sha256sum.txt | sha256sum --check --quiet --strict -) ||
+    fail "talosctl $1 does not match its release checksum"
+  install -D -m 0755 "$dir/talosctl-linux-amd64" "$talosctl"
+}
+
+# The CloudNativePG plugin of the version the operator runs, for a switchover.
+get_cnpg_plugin() {
+  local image version
+  image=$(kubectl get deployments --all-namespaces -l app.kubernetes.io/name=cloudnative-pg \
+    -o jsonpath='{.items[0].spec.template.spec.containers[0].image}')
+  version=${image##*:}
+  version=${version%%@*}
+  [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "Cannot tell the CloudNativePG version from the image $image"
+  cnpg=$state_dir/bin/kubectl-cnpg-$version
+  [[ -x $cnpg ]] && return 0
+  local base=https://github.com/cloudnative-pg/cloudnative-pg/releases/download/v$version
+  local tarball=kubectl-cnpg_${version}_linux_x86_64.tar.gz dir
+  dir=$(mktemp -d "$run_dir/cnpg.XXXXXX")
+  curl -fsSL -o "$dir/$tarball" "$base/$tarball"
+  curl -fsSL -o "$dir/checksums.txt" "$base/cnpg-$version-checksums.txt"
+  (cd "$dir" && grep -E " \*?${tarball//./\\.}\$" checksums.txt | sha256sum --check --quiet --strict -) ||
+    fail "kubectl-cnpg $version does not match its release checksum"
+  tar -xzf "$dir/$tarball" -C "$dir" kubectl-cnpg
+  install -D -m 0755 "$dir/kubectl-cnpg" "$cnpg"
+}
+
+# --- terraform --------------------------------------------------------------
+
+# Plans the targets, prints the plan, and stops if it holds anything the guard
+# does not allow. Leaves the plan in $plan, its JSON in $plan_json, and the
+# changes it would make in $changes (local_file ones left out).
+plan_targets() { # LABEL TARGET...
+  local label=$1 target targets=() violations
+  shift
+  for target in "$@"; do targets+=("-target=$target"); done
+  plan=$run_dir/${label// /-}.tfplan
+  plan_json=${plan%.tfplan}.json
+  stage="planning the $label"
+  if ! tf plan -input=false -no-color "$(lock_args)" -var-file="$tfvars" -out="$plan" "${targets[@]}" \
+    > "$run_dir/plan.log" 2>&1; then
+    tail -n 40 "$run_dir/plan.log"
+    fail "terraform plan failed for the $label"
+  fi
+  tf show -json "$plan" > "$plan_json"
+  # Changes an earlier step already planned are left out: in a real run they
+  # are applied by now, and a dry run would otherwise list them twice.
+  changes=$(jq -r "$list_changes" "$plan_json" | grep -v ' local_file\.' | grep -vxF -f "$run_dir/planned" || true)
+  # The untargeted report leaves out what the deploy plans itself.
+  printf '%s\n' "$changes" >> "$run_dir/planned"
+  if [[ -n $changes ]]; then
+    log "Plan for the $label:"
+    sed -n '/Terraform will perform the following actions/,/^Plan: /p' "$run_dir/plan.log"
+  else
+    log "Plan for the $label: no changes."
+  fi
+  violations=$(jq -r "$guard" "$plan_json")
+  [[ -z $violations ]] ||
+    fail "The $label plan changes things the deploy does not apply (apply by hand): ${violations//$'\n'/; }"
+}
+
+apply_plan() { # LABEL
+  [[ -n $(jq -r "$list_changes" "$plan_json") ]] || return 0
+  if $dry_run; then
+    [[ -z $changes ]] || did+=("$1")
+    return 0
+  fi
+  stage="applying the $1"
+  github_status pending "Applying the $1"
+  tf apply -input=false -no-color -lock-timeout=10m "$plan" || fail "terraform apply failed for the $1"
+  [[ -z $changes ]] || did+=("$1")
+}
+
+# --- steps ------------------------------------------------------------------
+
+preflight() {
+  local tool cp_line cp_version problems
+  stage="checking the tools"
+  for tool in terraform kubectl jq git gh curl; do
+    command -v "$tool" > /dev/null || fail "$tool is not on PATH"
+  done
+  [[ -r $tfvars ]] || fail "Cannot read $tfvars"
+  [[ -r $backend_config ]] || fail "Cannot read $backend_config"
+
+  stage="running terraform init"
+  export TF_IN_AUTOMATION=1 TF_PLUGIN_CACHE_DIR=$state_dir/plugin-cache
+  mkdir -p "$TF_PLUGIN_CACHE_DIR"
+  if ! tf init -input=false -no-color -reconfigure -lockfile=readonly -backend-config="$backend_config" \
+    > "$run_dir/init.log" 2>&1; then
+    tail -n 40 "$run_dir/init.log"
+    fail "terraform init failed"
+  fi
+
+  stage="reading the cluster credentials"
+  (
+    umask 077
+    tf output -raw talosconfig > "$run_dir/talosconfig"
+    tf output -raw kubeconfig > "$state_dir/kubeconfig.new"
+  )
+  mv -f -- "$state_dir/kubeconfig.new" "$state_dir/kubeconfig"
+  export TALOSCONFIG=$run_dir/talosconfig KUBECONFIG=$state_dir/kubeconfig
+
+  stage="checking the cluster"
+  nodes=$(node_list)
+  [[ $(grep -c ' controlplane$' <<< "$nodes") == 1 ]] || fail "Expected one control plane node, found: $nodes"
+  cp_line=$(grep ' controlplane$' <<< "$nodes")
+  cp_version=$(kubectl get node "${cp_line%% *}" -o jsonpath='{.status.nodeInfo.osImage}' |
+    sed -nE 's/^Talos \((v[0-9]+\.[0-9]+\.[0-9]+)\)$/\1/p')
+  [[ -n $cp_version ]] || fail "Cannot tell which Talos the control plane runs"
+  get_talosctl "$cp_version"
+  if $dry_run; then
+    problems=$(cluster_problems)
+    [[ -z $problems ]] || log "warning: the cluster is not healthy, so a deploy would wait, then stop: ${problems//$'\n'/; }"
+  else
+    wait_healthy "before the deploy"
+  fi
+}
+
+deploy_cilium() {
+  local versions from to name ip
+  plan_targets "Cilium release" helm_release.cilium null_resource.cilium_bgp_config
+  versions=$(jq -r '(.resource_changes // [])[]
+    | select(.address == "helm_release.cilium" and .change.actions == ["update"])
+    | "\(.change.before.version) \(.change.after.version)"' "$plan_json")
+  if [[ -n $versions ]]; then
+    read -r from to <<< "$versions"
+    if [[ $from != "$to" ]]; then
+      # One node at a time: seven nodes pulling at once has stalled etcd (README).
+      while read -r -u 3 name ip _; do
+        if $dry_run; then
+          log "Would pull quay.io/cilium/cilium:v$to on $name"
+          continue
+        fi
+        stage="pulling Cilium $to on $name"
+        log "Pulling quay.io/cilium/cilium:v$to on $name"
+        timeout 15m "$talosctl" --nodes "$ip" image pull --namespace cri "quay.io/cilium/cilium:v$to" ||
+          log "warning: the pull failed on $name; the rollout will pull it instead"
+      done 3<<< "$nodes"
+    fi
+  fi
+  apply_plan "Cilium release"
+  $dry_run || wait_healthy "after the Cilium release"
+}
+
+# Refuses a downgrade, and a jump of more than one minor release.
+check_talos_step() { # RUNNING WANTED
+  local have=${1#v} want=${2#v} have_major have_minor want_major want_minor
+  [[ $have =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && $want =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+    fail "Cannot compare the Talos versions $1 and $2"
+  [[ $(printf '%s\n' "$have" "$want" | sort -V | head -n 1) == "$have" ]] ||
+    fail "Talos $2 is older than the $1 a node runs; the deploy does not downgrade"
+  IFS=. read -r have_major have_minor _ <<< "$have"
+  IFS=. read -r want_major want_minor _ <<< "$want"
+  ((want_major == have_major && want_minor <= have_minor + 1)) ||
+    fail "Talos $1 to $2 skips a release; upgrade one minor release at a time"
+}
+
+move_postgres_primary_off() { # NODE
+  local primary primary_node replica deadline
+  primary=$(kubectl --namespace "$pg_namespace" get clusters.postgresql.cnpg.io "$pg_cluster" \
+    -o jsonpath='{.status.currentPrimary}')
+  [[ -n $primary ]] || fail "Cannot tell which Postgres instance is the primary"
+  primary_node=$(kubectl --namespace "$pg_namespace" get pod "$primary" -o jsonpath='{.spec.nodeName}')
+  [[ $primary_node == "$1" ]] || return 0
+  replica=$(kubectl --namespace "$pg_namespace" get pods \
+    -l "cnpg.io/cluster=$pg_cluster,cnpg.io/instanceRole=replica" -o json |
+    jq -r --arg node "$1" '[.items[]
+      | select(.spec.nodeName != $node)
+      | select(any(.status.conditions[]?; .type == "Ready" and .status == "True"))
+      | .metadata.name] | first // empty')
+  [[ -n $replica ]] || fail "The Postgres primary $primary is on $1 and no ready replica elsewhere can take over"
+  log "$1 holds the Postgres primary ($primary): promoting $replica"
+  "$cnpg" promote "$pg_cluster" "$replica" --namespace "$pg_namespace"
+  deadline=$((SECONDS + 600))
+  until [[ $(kubectl --namespace "$pg_namespace" get clusters.postgresql.cnpg.io "$pg_cluster" \
+    -o jsonpath='{.status.currentPrimary}' 2> /dev/null || true) == "$replica" && -z $(cluster_problems) ]]; do
+    ((SECONDS < deadline)) || fail "Postgres did not finish switching over to $replica within 10 minutes"
+    sleep 10
+  done
+}
+
+upgrade_node() { # NAME ADDRESS IMAGE RUNNING PROGRESS
+  local name=$1 ip=$2 image=$3 running=$4 progress=$5 version schematic deadline
+  version=${image##*:}
+  schematic=${image%:*}
+  schematic=${schematic##*/}
+  stage="upgrading $name to Talos $version ($progress)"
+  github_status pending "Upgrading $name to Talos $version ($progress)"
+  wait_healthy "before upgrading $name"
+  move_postgres_primary_off "$name"
+
+  # Pulled first: a pull that runs out of time inside the upgrade stops it
+  # with "error pulling upgrade image" (README).
+  log "$name: pulling $image"
+  timeout 15m "$talosctl" --nodes "$ip" image pull --namespace system "$image" || fail "$name could not pull $image"
+  log "$name: upgrading Talos $running -> $version"
+  talos --nodes "$ip" upgrade --image "$image" --drain-timeout 10m --wait --timeout 30m --progress plain ||
+    fail "talosctl upgrade failed on $name (it may still be cordoned)"
+
+  deadline=$((SECONDS + 1200))
+  until [[ $(talos_version_of "$ip") == "$version" && $(schematic_of "$ip") == "$schematic" ]] && node_ready "$name"; do
+    ((SECONDS < deadline)) || fail "$name is not back on Talos $version and Ready 20 minutes after its upgrade"
+    sleep 15
+  done
+  if [[ $(kubectl get node "$name" -o jsonpath='{.spec.unschedulable}') == true ]]; then
+    log "$name: uncordoning"
+    kubectl uncordon "$name"
+  fi
+  wait_healthy "after upgrading $name"
+  log "$name: on Talos $version"
+}
+
+upgrade_talos() {
+  local images name ip site image version schematic running running_schematic entry i=0
+  local todo=()
+  stage="working out the Talos upgrades"
+  # A dry run has applied nothing, so the images come from its worker plan.
+  if $dry_run; then
+    images=$(jq -c '.output_changes.talos_installer_images.after // empty' "$worker_plan_json")
+    [[ -n $images ]] || log "The new installer images are only known after an apply (a schematic change)."
+  fi
+  [[ -n ${images:-} ]] || images=$(tf output -json talos_installer_images)
+
+  while read -r -u 3 name ip site _; do
+    image=$(jq -r --arg key "${installer_key[$site]:-}" '.[$key] // empty' <<< "$images")
+    [[ -n $image ]] || fail "No installer image for $name (site $site)"
+    version=${image##*:}
+    schematic=${image%:*}
+    schematic=${schematic##*/}
+    running=$(talos_version_of "$ip")
+    running_schematic=$(schematic_of "$ip")
+    [[ -n $running && -n $running_schematic ]] || fail "Cannot read the Talos version and schematic of $name"
+    [[ $running == "$version" && $running_schematic == "$schematic" ]] && continue
+    check_talos_step "$running" "$version"
+    todo+=("$name $ip $image $running")
+  done 3<<< "$nodes"
+
+  if ((${#todo[@]} == 0)); then
+    log "Every node runs the Talos its machine config names."
+    return 0
+  fi
+  log "Talos upgrades, in this order:"
+  for entry in "${todo[@]}"; do
+    read -r name _ image running <<< "$entry"
+    log "  $name: $running -> ${image##*:}"
+  done
+  if $dry_run; then
+    did+=("Talos ${image##*:} on ${#todo[@]} node(s)")
+    return 0
+  fi
+
+  get_cnpg_plugin
+  for entry in "${todo[@]}"; do
+    i=$((i + 1))
+    read -r name ip image running <<< "$entry"
+    upgrade_node "$name" "$ip" "$image" "$running" "$i of ${#todo[@]}"
+  done
+  did+=("Talos ${image##*:} on ${#todo[@]} node(s)")
+}
+
+check_vault() {
+  local sealed
+  sealed=$(kubectl exec "${vault_pod[@]}" -- vault status -format=json 2> /dev/null | jq -r '.sealed' 2> /dev/null || true)
+  if [[ $sealed == true ]]; then
+    log "Vault is sealed (a drain of its node restarts it): unseal it with vault operator unseal."
+    notes+=("Vault is sealed")
+  elif [[ $sealed != false ]]; then
+    log "warning: could not ask Vault whether it is sealed"
+  fi
+}
+
+# Changes in proxmox/ the deploy does not make are left for a manual apply;
+# this says what they are, and applies nothing.
+report_untargeted() {
+  local left
+  stage="planning everything, to report what is left"
+  if ! tf plan -input=false -no-color -lock=false -var-file="$tfvars" -out="$run_dir/all.tfplan" \
+    > "$run_dir/all.log" 2>&1; then
+    log "warning: the untargeted plan failed:"
+    tail -n 20 "$run_dir/all.log"
+    return 0
+  fi
+  left=$(tf show -json "$run_dir/all.tfplan" | jq -r "$list_changes" | grep -v ' local_file\.' |
+    grep -vxF -f "$run_dir/planned" || true)
+  [[ -n $left ]] || return 0
+  log "Left for a manual apply (outside what the deploy applies):"
+  # shellcheck disable=SC2001 # indents every line
+  sed 's/^/  /' <<< "$left"
+  notes+=("$(wc -l <<< "$left") change(s) left for a manual apply")
+}
+
+# --- entry points -----------------------------------------------------------
+
+# Runs from the systemd timer: takes the lock, fetches, and if the target
+# commit is new, hands over to that commit's own copy of this script.
+launch() {
+  local copy failed_sha failed_why
+  mkdir -p "$state_dir"
+  chmod 700 "$state_dir"
+  exec 9>> "$state_dir/lock"
+  if ! flock --nonblock 9; then
+    log "A deploy is already running."
+    exit 0
+  fi
+  if [[ -e $state_dir/paused ]] && ! $dry_run; then
+    log "Paused: $state_dir/paused exists."
+    exit 0
+  fi
+
+  [[ -d $repo/.git ]] || git clone --quiet "$repo_url" "$repo"
+  git -C "$repo" fetch --quiet --prune origin
+  sha=$(git -C "$repo" rev-parse --verify --quiet "${ref:-origin/main}^{commit}" ||
+    git -C "$repo" rev-parse --verify --quiet "origin/$ref^{commit}") ||
+    { log "No such branch or commit: $ref"; exit 2; }
+
+  if ! $dry_run; then
+    [[ $(read_state deployed) == "$sha" ]] && exit 0
+    IFS=$'\t' read -r failed_sha failed_why < <(read_state failed) || true
+    if [[ ${failed_sha:-} == "$sha" ]] && ! $retry; then
+      raise_alert "$failed_why"
+      exit 0
+    fi
+  fi
+
+  # The checkout below rewrites this file. Bash reads a script as it runs, so
+  # the deploy runs from a copy - the target commit's, when it has one.
+  copy=$(mktemp "$state_dir/linds-tf-deploy.XXXXXX")
+  if git -C "$repo" cat-file -e "$sha:deploy/linds-tf-deploy" 2> /dev/null; then
+    git -C "$repo" show "$sha:deploy/linds-tf-deploy" > "$copy"
+  else
+    cp -- "$0" "$copy"
+  fi
+  LINDS_TF_DEPLOY_SHA=$sha exec bash "$copy" "${args[@]}"
+}
+
+finish() {
+  local code=$? why
+  if $dry_run && [[ -n ${restore:-} ]]; then
+    git -C "$repo" checkout --quiet --force --detach "$restore" || true
+  fi
+  if ((code != 0)); then
+    why=$(cat -- "$run_dir/failure" 2> /dev/null || true)
+    [[ -n $why ]] || why="Stopped while $stage (exit $code)"
+    log "FAILED: $why"
+    if ! $dry_run; then
+      printf '%s\t%s\n' "$sha" "${sha:0:7} failed: $why" > "$state_dir/failed"
+      github_status failure "$why"
+      raise_alert "${sha:0:7} failed: $why"
+    fi
+  fi
+  rm -rf -- "$run_dir"
+}
+
+run() {
+  local previous summary
+  sha=$LINDS_TF_DEPLOY_SHA
+  rm -f -- "$0"
+  run_dir=$(mktemp -d "$state_dir/run.XXXXXX")
+  touch "$run_dir/planned"
+  stage="starting"
+  trap finish EXIT
+  trap 'fail "Stopped by a signal while $stage"' INT TERM
+
+  stage="checking out ${sha:0:7}"
+  # A dry run puts back what was checked out: the timer starts the script from
+  # this clone, and an older branch has no deploy/ in it.
+  restore=$(git -C "$repo" rev-parse --verify --quiet HEAD || true)
+  git -C "$repo" checkout --quiet --force --detach "$sha"
+  git -C "$repo" clean -fdq
+  if $dry_run; then
+    log "Dry run of $(git -C "$repo" log -1 --format='%h %s' "$sha")"
+  else
+    log "Deploying $(git -C "$repo" log -1 --format='%h %s' "$sha")"
+  fi
+
+  previous=$(read_state deployed)
+  if ! $dry_run && [[ -n $previous ]] && git -C "$repo" cat-file -e "$previous^{commit}" 2> /dev/null &&
+    git -C "$repo" diff --quiet "$previous" "$sha" -- proxmox; then
+    log "Nothing under proxmox/ changed since ${previous:0:7}."
+    printf '%s\n' "$sha" > "$state_dir/deployed"
+    rm -f -- "$state_dir/failed"
+    github_status success "Nothing under proxmox/ to deploy"
+    return 0
+  fi
+
+  github_status pending "Deploying ${sha:0:7}"
+  did=() notes=()
+  preflight
+
+  # Control plane first: on a Kubernetes bump, the kubelets must not run ahead
+  # of the API server.
+  plan_targets "control plane config" talos_machine_configuration_apply.controlplane
+  apply_plan "control plane config"
+  $dry_run || wait_healthy "after the control plane config"
+
+  plan_targets "worker configs" talos_machine_configuration_apply.worker talos_machine_configuration_apply.worker_linds
+  worker_plan_json=$plan_json
+  apply_plan "worker configs"
+  $dry_run || wait_healthy "after the worker configs"
+
+  deploy_cilium
+  upgrade_talos
+  check_vault
+  report_untargeted
+
+  if ((${#did[@]})); then
+    summary="Deployed ${sha:0:7}: $(join "${did[@]}")"
+  else
+    summary="${sha:0:7}: the cluster already matched"
+  fi
+  ((${#notes[@]} == 0)) || summary+=". $(join "${notes[@]}")"
+  if $dry_run; then
+    log "Dry run, nothing changed. A deploy would end with: $summary"
+    return 0
+  fi
+  printf '%s\n' "$sha" > "$state_dir/deployed"
+  rm -f -- "$state_dir/failed"
+  github_status success "$summary"
+  log "$summary"
+}
+
+dry_run=false retry=false ref=
+args=("$@")
+while (($#)); do
+  case $1 in
+    --dry-run) dry_run=true ;;
+    --retry) retry=true ;;
+    --ref)
+      ref=${2:?--ref needs a branch or commit}
+      shift
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      usage >&2
+      exit 2
+      ;;
+  esac
+  shift
+done
+if [[ -n $ref ]] && ! $dry_run; then
+  echo "--ref is for dry runs only: the deploy only applies main." >&2
+  exit 2
+fi
+
+if [[ -n ${LINDS_TF_DEPLOY_SHA:-} ]]; then
+  run
+else
+  launch
+fi

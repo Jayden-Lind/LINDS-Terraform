@@ -9,6 +9,7 @@ Kubernetes cluster spanning both, and the storage underneath it.
 | --- | --- |
 | [`proxmox/`](proxmox/) | `jd-proxmox-02` end to end (guests, networking, storage, ZFS/NFS) plus the LINDS guests and the Talos/Cilium cluster |
 | [`bootstrap/`](bootstrap/) | The versitygw container that serves the S3 state backend. Separate root module with local state — see below |
+| [`deploy/`](deploy/) | The timer on `jd-jump-01` that applies Talos and Cilium changes once they are merged to `main` |
 | [`packer/`](packer/) | The Ubuntu LTS template every cloned Linux guest comes from, and in [`packer/windows/`](packer/windows/) the Windows Server template |
 | [`ESXi/`](ESXi/) | Legacy vSphere config, kept for reference; not in active use |
 
@@ -150,6 +151,10 @@ See [`proxmox/README.md`](proxmox/README.md) for the file layout and the
 sharp edges.
 
 ## Talos
+
+Merging a change to `main` deploys it. [`deploy/`](deploy/) runs the steps
+below, in this order, within about five minutes of the merge, and touches
+nothing else in `proxmox/`. They are written out here for doing it by hand.
 
 ### Applying machine config and Cilium changes
 
