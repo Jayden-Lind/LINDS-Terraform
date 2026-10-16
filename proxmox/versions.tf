@@ -1,9 +1,10 @@
 terraform {
-  required_version = ">= 1.9"
+  # 1.10+ for the S3 backend's use_lockfile.
+  required_version = ">= 1.10"
 
-  # State lives in the MinIO instance running as LXC 106 on jd-proxmox-02.
-  # That container is deliberately NOT managed from this root module - see
-  # ../bootstrap/README.md for why and how it is managed instead.
+  # State lives in the versitygw S3 gateway running as LXC 107 on
+  # jd-proxmox-02. That container is deliberately NOT managed from this root
+  # module - see ../bootstrap/README.md for why and how it is managed instead.
   backend "s3" {
     bucket = "tfstate"
     endpoints = {
@@ -11,7 +12,12 @@ terraform {
     }
     key = "linds.tfstate"
 
-    region                      = "main"
+    # versitygw rejects a signature for any region but its own (MinIO took
+    # anything, and this used to say "main").
+    region = "us-east-1"
+    # S3-native locking: linds.tfstate.tflock, created with If-None-Match.
+    use_lockfile = true
+
     skip_credentials_validation = true
     skip_requesting_account_id  = true
     skip_metadata_api_check     = true

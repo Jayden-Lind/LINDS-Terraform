@@ -3,11 +3,11 @@ terraform {
 
   # LOCAL STATE ON PURPOSE.
   #
-  # This root module manages the MinIO container that serves the S3 backend the
-  # ../proxmox module stores its state in. Putting that container's own state
-  # inside itself would mean:
-  #   - a cold start (MinIO down, host rebuilt) leaves you unable to even
-  #     `terraform init` the thing you need in order to bring MinIO back, and
+  # This root module manages the versitygw container that serves the S3 backend
+  # the ../proxmox module stores its state in. Putting that container's own
+  # state inside itself would mean:
+  #   - a cold start (gateway down, host rebuilt) leaves you unable to even
+  #     `terraform init` the thing you need in order to bring it back, and
   #   - any plan that wanted to replace the container would be writing its own
   #     state to a bucket that stops existing halfway through the apply.
   #

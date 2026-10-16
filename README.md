@@ -8,7 +8,7 @@ Kubernetes cluster spanning both, and the storage underneath it.
 | Directory | What it manages |
 | --- | --- |
 | [`proxmox/`](proxmox/) | `jd-proxmox-02` end to end (guests, networking, storage, ZFS/NFS) plus the LINDS guests and the Talos/Cilium cluster |
-| [`bootstrap/`](bootstrap/) | The MinIO container that serves the S3 state backend. Separate root module with local state — see below |
+| [`bootstrap/`](bootstrap/) | The versitygw container that serves the S3 state backend. Separate root module with local state — see below |
 | [`packer/`](packer/) | The Ubuntu LTS template every cloned Linux guest comes from, and in [`packer/windows/`](packer/windows/) the Windows Server template |
 | [`ESXi/`](ESXi/) | Legacy vSphere config, kept for reference; not in active use |
 
@@ -28,8 +28,8 @@ pool.
 
 ## State, and the chicken-and-egg problem
 
-`proxmox/` keeps its state in a MinIO bucket. MinIO runs as LXC 106 on
-`jd-proxmox-02` — the host `proxmox/` manages. Managing that container from the
+`proxmox/` keeps its state in an S3 bucket on `jd-s3-01`, a versitygw gateway
+that runs as LXC 107 on `jd-proxmox-02` — the host `proxmox/` manages. Managing that container from the
 same module would make a cold start impossible and let a replace eat its own
 state mid-apply.
 
@@ -129,7 +129,7 @@ Things that are not obvious from the files:
 ```shell
 cd proxmox/
 cp terraform.tfvars.example terraform.tfvars     # then fill it in
-cp backend.conf.example backend.conf             # MinIO credentials
+cp backend.conf.example backend.conf             # jd-s3-01 `terraform` account
 
 terraform init -backend-config=backend.conf
 terraform plan

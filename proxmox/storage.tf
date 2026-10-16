@@ -32,7 +32,8 @@ resource "proxmox_storage_lvmthin" "local_lvm" {
 }
 
 # VM pool: 3-wide raidz1 across one 2 TB and two 600 GB SATA SSDs.
-# Backs every guest boot disk on this node, plus the MinIO and NFS datasets.
+# Backs every guest boot disk on this node, plus the S3 (versitygw) and NFS
+# datasets.
 resource "proxmox_storage_zfspool" "ssd_mixed" {
   id       = "ssd-mixed"
   zfs_pool = "VM"
