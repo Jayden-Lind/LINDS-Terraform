@@ -153,8 +153,9 @@ sharp edges.
 ## Talos
 
 Merging a change to `main` deploys it. [`deploy/`](deploy/) runs the steps
-below, in this order, within about five minutes of the merge, and touches
-nothing else in `proxmox/`. They are written out here for doing it by hand.
+below, in this order, within six hours of the merge (at once with `systemctl
+--user start linds-tf-deploy.service` on `jd-jump-01`), and touches nothing
+else in `proxmox/`. They are written out here for doing it by hand.
 
 ### Applying machine config and Cilium changes
 

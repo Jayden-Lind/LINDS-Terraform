@@ -2,7 +2,7 @@
 
 Merging to `main` applies the Talos and Cilium parts of [`proxmox/`](../proxmox/)
 to the cluster. [`linds-tf-deploy`](linds-tf-deploy) runs on `jd-jump-01` from a
-systemd user timer: every five minutes it fetches `main`, and when there is a
+systemd user timer: every six hours it fetches `main`, and when there is a
 commit it has not deployed, it runs the README's
 [Talos procedure](../README.md#talos) in order:
 
@@ -94,9 +94,9 @@ The first run deploys whatever `main` is. When the cluster already matches
 | --- | --- |
 | Watch a deploy | `journalctl --user -t linds-tf-deploy -f` (by identifier: `-u` misses the lines short-lived commands print, which journald cannot tie to the unit once they exit) |
 | See how it went | The `deploy/proxmox` status on the commit in GitHub: the current step while it runs, then the result |
-| Get told when it fails | Nothing to do: `LindsTerraformDeployFailed` goes to Discord through Alertmanager. It keeps firing while the latest commit's deploy stands failed, and resolves about 20 minutes after a deploy succeeds |
+| Get told when it fails | Nothing to do: `LindsTerraformDeployFailed` goes to Discord through Alertmanager. It keeps firing while the latest commit's deploy stands failed, and resolves when a later deploy succeeds |
 | See what a merge would do | `~/.local/state/linds-tf-deploy/repo/deploy/linds-tf-deploy --dry-run [--ref <branch>]` (a branch or a PR's head, e.g. `renovate/cilium-1.x`) |
-| Deploy now instead of within five minutes | `systemctl --user start linds-tf-deploy.service` |
+| Deploy now instead of at the next check (up to six hours) | `systemctl --user start linds-tf-deploy.service` |
 | Pause it | `touch ~/.local/state/linds-tf-deploy/paused` (survives reboots; dry runs still work). `rm` it to resume |
 | Retry a failed commit, after fixing the cause | `~/.local/state/linds-tf-deploy/repo/deploy/linds-tf-deploy --retry`. A new commit on `main` retries by itself |
 
