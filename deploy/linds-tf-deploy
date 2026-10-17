@@ -197,19 +197,27 @@ cluster_problems() {
     | "cilium: \(.numberReady) of \(.desiredNumberScheduled) agents ready, \(.updatedNumberScheduled // 0) up to date"' <<< "$ds"
   pg=$(kubectl --namespace "$pg_namespace" get clusters.postgresql.cnpg.io "$pg_cluster" -o json 2> /dev/null) ||
     { echo "cannot read the Postgres cluster"; return 0; }
-  jq -r 'select(.status.phase != "Cluster in healthy state" or .status.readyInstances != .spec.instances)
+  jq -r 'select(.status.phase != "Cluster in healthy state" or .status.readyInstances != .spec.instances
+      or ((.status.instancesStatus.healthy // []) | length) != .spec.instances)
     | "postgres: \(.status.phase), \(.status.readyInstances) of \(.spec.instances) instances ready"' <<< "$pg"
 }
 
+# Healthy twice in a row, 30 s apart. Just after a node comes back, the API can
+# still report its pods as they were before it rebooted: on 2026-10-17 the
+# check passed with a Postgres instance that the drain had deleted, and the
+# next node's upgrade began while Postgres ran on one instance.
 wait_healthy() { # WHEN [SECONDS]
-  local deadline=$((SECONDS + ${2:-900})) problems
-  problems=$(cluster_problems)
-  while [[ -n $problems ]]; do
-    if ((SECONDS >= deadline)); then
-      fail "Cluster not healthy $1: ${problems//$'\n'/; }"
-    fi
-    sleep 15
+  local deadline=$((SECONDS + ${2:-900})) problems healthy=0
+  while ((healthy < 2)); do
     problems=$(cluster_problems)
+    if [[ -n $problems ]]; then
+      healthy=0
+      ((SECONDS < deadline)) || fail "Cluster not healthy $1: ${problems//$'\n'/; }"
+    else
+      healthy=$((healthy + 1))
+      ((healthy < 2)) || break
+    fi
+    sleep 30
   done
 }
 

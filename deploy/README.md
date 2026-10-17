@@ -92,7 +92,7 @@ The first run deploys whatever `main` is. When the cluster already matches
 
 | To | Do |
 | --- | --- |
-| Watch a deploy | `journalctl --user -u linds-tf-deploy -f` |
+| Watch a deploy | `journalctl --user -t linds-tf-deploy -f` (by identifier: `-u` misses the lines short-lived commands print, which journald cannot tie to the unit once they exit) |
 | See how it went | The `deploy/proxmox` status on the commit in GitHub: the current step while it runs, then the result |
 | Get told when it fails | Nothing to do: `LindsTerraformDeployFailed` goes to Discord through Alertmanager. It keeps firing while the latest commit's deploy stands failed, and resolves about 20 minutes after a deploy succeeds |
 | See what a merge would do | `~/.local/state/linds-tf-deploy/repo/deploy/linds-tf-deploy --dry-run [--ref <branch>]` (a branch or a PR's head, e.g. `renovate/cilium-1.x`) |
