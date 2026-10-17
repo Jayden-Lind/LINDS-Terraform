@@ -139,16 +139,28 @@ github_status() { # STATE DESCRIPTION
 }
 
 # The failure alert goes to Alertmanager, which sends it to Discord. It is
-# raised with an end time 20 minutes out and raised again on every timer run
-# while the failure stands, so it resolves on its own once a deploy succeeds.
-raise_alert() { # SUMMARY
+# raised again on every timer run while the failure stands, each time ending
+# seven hours out: longer than the six hours between runs, so it does not
+# lapse in between. A later deploy that succeeds resolves it (clear_failure).
+raise_alert() { # SUMMARY [START END]
   [[ -s $state_dir/kubeconfig ]] || return 0
   KUBECONFIG=$state_dir/kubeconfig kubectl exec "${alertmanager[@]}" -- \
     amtool --alertmanager.url=http://localhost:9093 alert add \
     alertname=LindsTerraformDeployFailed severity=warning \
     --annotation=summary="LINDS-Terraform deploy of ${1:0:500}" \
-    --end="$(date -u -d '+20 minutes' +%Y-%m-%dT%H:%M:%SZ)" > /dev/null 2>&1 ||
-    log "warning: could not raise the alert in Alertmanager"
+    --start="${2:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}" \
+    --end="${3:-$(date -u -d '+7 hours' +%Y-%m-%dT%H:%M:%SZ)}" > /dev/null 2>&1 ||
+    log "warning: could not update the alert in Alertmanager"
+}
+
+# After a success: forget the failure and resolve its alert, by sending it
+# again with an end time that has passed.
+clear_failure() {
+  local why
+  [[ -e $state_dir/failed ]] || return 0
+  why=$(cut -f2- -- "$state_dir/failed")
+  rm -f -- "$state_dir/failed"
+  raise_alert "$why" "$(date -u -d '-1 minute' +%Y-%m-%dT%H:%M:%SZ)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 
 # --- the cluster ------------------------------------------------------------
@@ -611,7 +623,7 @@ run() {
     git -C "$repo" diff --quiet "$previous" "$sha" -- proxmox; then
     log "Nothing under proxmox/ changed since ${previous:0:7}."
     printf '%s\n' "$sha" > "$state_dir/deployed"
-    rm -f -- "$state_dir/failed"
+    clear_failure
     github_status success "Nothing under proxmox/ to deploy"
     return 0
   fi
@@ -647,7 +659,7 @@ run() {
     return 0
   fi
   printf '%s\n' "$sha" > "$state_dir/deployed"
-  rm -f -- "$state_dir/failed"
+  clear_failure
   github_status success "$summary"
   log "$summary"
 }

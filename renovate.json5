@@ -9,11 +9,12 @@
   // one search lists every open update:
   //   https://github.com/pulls?q=is%3Aopen+is%3Apr+user%3AJayden-Lind+label%3Arenovate
   //
-  // Merging a Talos, Kubernetes or Cilium bump here deploys it: within about
-  // five minutes the timer in deploy/ applies it to the cluster, in the order
-  // the comments beside the pins give. A Talos bump reboots every node, one at
-  // a time. Anything else lands at the next manual `terraform apply` in the
-  // directory it touches.
+  // Merging a Talos, Kubernetes or Cilium bump here deploys it: within six
+  // hours the timer in deploy/ applies it to the cluster, in the order the
+  // comments beside the pins give (at once with `systemctl --user start
+  // linds-tf-deploy.service` on jd-jump-01). A Talos bump reboots every node,
+  // one at a time. Anything else lands at the next manual `terraform apply` in
+  // the directory it touches.
   labels: ["renovate"],
 
   // Legacy vSphere config, kept for reference and never applied.
@@ -92,7 +93,7 @@
       // Said on each of these PRs, where it is read at merge time.
       matchDepNames: ["siderolabs/talos", "kubernetes", "cilium"],
       prBodyNotes: [
-        "Merging this deploys it: within about five minutes, the deploy timer on jd-jump-01 applies it to the cluster (deploy/README.md). A Talos bump reboots every node, one at a time.",
+        "Merging this deploys it: the deploy timer on jd-jump-01 applies it to the cluster within six hours, or at once with `systemctl --user start linds-tf-deploy.service` there (deploy/README.md). A Talos bump reboots every node, one at a time.",
       ],
     },
     {
