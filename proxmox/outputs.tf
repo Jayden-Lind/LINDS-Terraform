@@ -53,5 +53,9 @@ output "windows_bootstrap_addresses" {
       for address in flatten(proxmox_virtual_environment_vm.jd_fs_01.ipv4_addresses) : address
       if !startswith(address, "127.") && !startswith(address, "169.254.")
     ]
+    (proxmox_virtual_environment_vm.jd_dc_01.name) = [
+      for address in flatten(proxmox_virtual_environment_vm.jd_dc_01.ipv4_addresses) : address
+      if !startswith(address, "127.") && !startswith(address, "169.254.")
+    ]
   }
 }
