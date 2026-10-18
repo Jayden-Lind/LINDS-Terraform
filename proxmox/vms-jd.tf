@@ -144,6 +144,102 @@ resource "proxmox_virtual_environment_vm" "jd_dc" {
 }
 
 ###############################################################################
+# JD-FS-01 (1113) - the file server again, cloned from the Windows template
+#
+# Replaces VM 1103 (resource jd_fs below), which was installed by hand. The
+# clone is prepared with LINDS-Ansible (windows-prepare.yml, windows-edition.yml)
+# while 1103 is in service; at the swap 1103 is stopped and renamed
+# JD-FS-01-old, and the data disk moves to this VM with
+# playbooks/windows-data-disk.yml. See LINDS-Ansible docs/windows.
+#
+# As at LINDS, the data disk is not in this resource: `disk` is ignored, so
+# Terraform neither detaches it nor tries to resize the 14.2 TiB volume.
+###############################################################################
+
+resource "proxmox_virtual_environment_vm" "jd_fs_01" {
+  name      = "JD-FS-01"
+  vm_id     = 1113
+  node_name = local.nodes.jd.name
+
+  # The template carries the QEMU guest agent, and outputs.tf reads the
+  # guest's DHCP address through it.
+  agent {
+    enabled = true
+  }
+
+  cpu {
+    type         = "host"
+    architecture = "x86_64"
+    cores        = 8
+    numa         = true
+    # As VM 1103: no Hyper-V or WSL2 in here, so drop the nested-paging tax.
+    flags = concat(["-nested-virt"], local.guest_cpu_flags)
+  }
+
+  memory {
+    dedicated = 16384
+    floating  = 0 # ballooning off
+  }
+
+  bios = "ovmf"
+  # Pinned, as the template is: Windows notices when its chipset version moves.
+  machine = "pc-q35-11.0+pve2"
+  on_boot = true
+
+  # A file server with live shares: attribute writes must never restart it
+  # behind your back.
+  reboot_after_update = false
+
+  boot_order    = ["scsi0"]
+  scsi_hardware = "virtio-scsi-single"
+
+  # A Windows OS type gives the guest a hardware clock in local time.
+  operating_system {
+    type = "win11"
+  }
+
+  startup {
+    order    = "3" # after JD-DC-01
+    up_delay = "60"
+  }
+
+  clone {
+    vm_id = local.windows_template_vm_id
+  }
+
+  # Matches the template: a real EFI variable store with Secure Boot on.
+  efi_disk {
+    datastore_id      = local.datastores.jd
+    type              = "4m"
+    pre_enrolled_keys = true
+  }
+
+  # The template's disk is 60 GB; the clone is grown to this and Windows
+  # extends C: into it on first boot. VM 1103 has 80 GB with 16.7 GiB used.
+  disk {
+    datastore_id = local.datastores.jd
+    interface    = "scsi0"
+    size         = 80
+    cache        = "none"
+    discard      = "on"
+    iothread     = true
+    ssd          = true
+  }
+
+  # Untagged on vmbr0, as the other JD servers: VLAN 50.
+  network_device {
+    bridge = "vmbr0"
+    model  = "virtio"
+    queues = 8
+  }
+
+  lifecycle {
+    # The clone source is only read at create time.
+    ignore_changes = [clone, disk]
+  }
+}
+
+###############################################################################
 # JD-FS-01 (1103) - Windows Server 2025 file server
 #
 # Takes the bulk file shares off JD-DC-01 so SMB signing can be turned off on

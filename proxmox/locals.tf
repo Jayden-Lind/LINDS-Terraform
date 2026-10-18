@@ -13,8 +13,9 @@ locals {
   # Ubuntu LTS template built by ../packer. Cloned guests reference it by ID.
   ubuntu_template_vm_id = 150
 
-  # Windows Server 2025 template built by ../packer/windows. It exists on the
-  # LINDS node only.
+  # Windows Server 2025 template built by ../packer/windows, with this VMID on
+  # each node (packer_linds.pkrvars.hcl and packer_jd.pkrvars.hcl). A clone
+  # comes from the template on its own node.
   windows_template_vm_id = 160
 
   # Default guest datastores per site.
