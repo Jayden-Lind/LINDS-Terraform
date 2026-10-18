@@ -117,7 +117,8 @@ source "proxmox-iso" "windows" {
   network_adapters {
     bridge   = "vmbr0"
     model    = "virtio"
-    vlan_tag = var.build_vlan
+    # 0: untagged, as the JD servers are on vmbr0.
+    vlan_tag = var.build_vlan == 0 ? "" : tostring(var.build_vlan)
     firewall = false
   }
 

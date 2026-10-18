@@ -55,7 +55,7 @@ variable "disk_size" {
 
 variable "build_vlan" {
   type        = number
-  description = "VLAN the build VM sits on. It needs DHCP, and Packer must reach it on 5985."
+  description = "VLAN the build VM sits on, or 0 for untagged. It needs DHCP, and Packer must reach it on 5985."
   default     = 300
 }
 

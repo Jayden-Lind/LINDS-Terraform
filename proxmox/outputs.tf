@@ -33,12 +33,13 @@ output "vm_ids" {
       (proxmox_virtual_environment_vm.linds_torrent.name) = proxmox_virtual_environment_vm.linds_torrent.vm_id
       (proxmox_virtual_environment_vm.linds_dc2.name)     = proxmox_virtual_environment_vm.linds_dc2.vm_id
       (proxmox_virtual_environment_vm.linds_dc.name)      = proxmox_virtual_environment_vm.linds_dc.vm_id
+      (proxmox_virtual_environment_vm.jd_fs_01.name)      = proxmox_virtual_environment_vm.jd_fs_01.vm_id
     },
   )
 }
 
 output "windows_bootstrap_addresses" {
-  description = "IPv4 addresses the Windows guests report through the guest agent. A fresh clone is on DHCP; Ansible needs this address for its first connection (LINDS-Ansible, playbooks/windows-build.yml, -e bootstrap_address=...)."
+  description = "IPv4 addresses the Windows guests report through the guest agent. A fresh clone is on DHCP; Ansible needs this address for its first connection (LINDS-Ansible, playbooks/windows-prepare.yml, -e bootstrap_address=...)."
   value = {
     (proxmox_virtual_environment_vm.linds_dc2.name) = [
       for address in flatten(proxmox_virtual_environment_vm.linds_dc2.ipv4_addresses) : address
@@ -46,6 +47,10 @@ output "windows_bootstrap_addresses" {
     ]
     (proxmox_virtual_environment_vm.linds_dc.name) = [
       for address in flatten(proxmox_virtual_environment_vm.linds_dc.ipv4_addresses) : address
+      if !startswith(address, "127.") && !startswith(address, "169.254.")
+    ]
+    (proxmox_virtual_environment_vm.jd_fs_01.name) = [
+      for address in flatten(proxmox_virtual_environment_vm.jd_fs_01.ipv4_addresses) : address
       if !startswith(address, "127.") && !startswith(address, "169.254.")
     ]
   }
