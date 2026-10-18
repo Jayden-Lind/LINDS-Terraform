@@ -266,8 +266,11 @@ resource "proxmox_virtual_environment_vm" "jd_fs_01" {
 # apply intact. Confirm with `qm config 1103` before and after any apply here.
 ###############################################################################
 
+# Retired at the swap on 19 October 2026: stopped, renamed JD-FS-01-old and
+# kept off at boot. Its data disk moved to VM 1113 (jd_fs_01), so it owns
+# nothing that matters any more. Delete it, and this resource, when Jayden says.
 resource "proxmox_virtual_environment_vm" "jd_fs" {
-  name      = "JD-FS-01"
+  name      = "JD-FS-01-old"
   vm_id     = 1103
   node_name = local.nodes.jd.name
 
@@ -294,7 +297,9 @@ resource "proxmox_virtual_environment_vm" "jd_fs" {
 
   bios    = "ovmf"
   machine = "pc-q35-11.0+pve2"
-  on_boot = true
+  on_boot = false # retired
+  # Never start it: it would come up with the name and address of VM 1113.
+  started = false
 
   # File server holding live shares. As JD-DC-01: attribute writes must never
   # trigger a restart behind your back.
