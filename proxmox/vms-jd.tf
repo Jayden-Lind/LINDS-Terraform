@@ -77,8 +77,11 @@ module "talos_workers_jd" {
 # shares. Destroying this VM would take that zvol with it.
 ###############################################################################
 
+# Retired at the swap on 19 October 2026: demoted, stopped, renamed
+# JD-DC-01-old and kept off at boot. Delete it, and this resource, when
+# Jayden says.
 resource "proxmox_virtual_environment_vm" "jd_dc" {
-  name      = "JD-DC-01"
+  name      = "JD-DC-01-old"
   vm_id     = 1102
   node_name = local.nodes.jd.name
 
@@ -103,7 +106,9 @@ resource "proxmox_virtual_environment_vm" "jd_dc" {
 
   bios    = "ovmf"
   machine = "pc-q35-11.0+pve2"
-  on_boot = true
+  on_boot = false # retired
+  # Never start it: it would come up with the name and address of VM 1114.
+  started = false
 
   # Domain controller and file server. Same reasoning as JD-VyOS-01: attribute
   # writes must never trigger a restart behind your back.
@@ -140,6 +145,98 @@ resource "proxmox_virtual_environment_vm" "jd_dc" {
 
   lifecycle {
     prevent_destroy = true
+  }
+}
+
+###############################################################################
+# JD-DC-01 (1114) - the JD domain controller again, cloned from the template
+#
+# Replaces VM 1102 (resource jd_dc below), which was installed by hand. The
+# clone is prepared with LINDS-Ansible (windows-prepare.yml, then
+# windows-edition.yml: a domain controller cannot change edition after its
+# promotion) while 1102 is in service; at the swap 1102 is demoted, stopped
+# and renamed JD-DC-01-old. Only a domain controller and DNS server: 4 cores
+# and 8 GB, as LINDS-DC2. No data disk.
+###############################################################################
+
+resource "proxmox_virtual_environment_vm" "jd_dc_01" {
+  name      = "JD-DC-01"
+  vm_id     = 1114
+  node_name = local.nodes.jd.name
+
+  # The template carries the QEMU guest agent, and outputs.tf reads the
+  # guest's DHCP address through it.
+  agent {
+    enabled = true
+  }
+
+  cpu {
+    type         = "host"
+    architecture = "x86_64"
+    cores        = 4
+    flags        = concat(["-nested-virt"], local.guest_cpu_flags)
+  }
+
+  memory {
+    dedicated = 8192
+    floating  = 0 # ballooning off
+  }
+
+  bios = "ovmf"
+  # Pinned, as the template is: Windows notices when its chipset version moves.
+  machine = "pc-q35-11.0+pve2"
+  on_boot = true
+
+  # A domain controller. Attribute writes must never restart it behind your
+  # back.
+  reboot_after_update = false
+
+  boot_order    = ["scsi0"]
+  scsi_hardware = "virtio-scsi-single"
+
+  # A Windows OS type gives the guest a hardware clock in local time.
+  operating_system {
+    type = "win11"
+  }
+
+  startup {
+    order    = "2" # before JD-FS-01
+    up_delay = "100"
+  }
+
+  clone {
+    vm_id = local.windows_template_vm_id
+  }
+
+  # Matches the template: a real EFI variable store with Secure Boot on.
+  efi_disk {
+    datastore_id      = local.datastores.jd
+    type              = "4m"
+    pre_enrolled_keys = true
+  }
+
+  # The template's disk is 60 GB; the clone is grown to this and Windows
+  # extends C: into it on first boot. VM 1102 had 40 GB with 8 GB free.
+  disk {
+    datastore_id = local.datastores.jd
+    interface    = "scsi0"
+    size         = 80
+    cache        = "none"
+    discard      = "on"
+    iothread     = true
+    ssd          = true
+  }
+
+  # Untagged on vmbr0, as the other JD servers: VLAN 50.
+  network_device {
+    bridge = "vmbr0"
+    model  = "virtio"
+    queues = 4
+  }
+
+  lifecycle {
+    # The clone source is only read at create time.
+    ignore_changes = [clone]
   }
 }
 
