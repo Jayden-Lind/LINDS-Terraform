@@ -77,8 +77,11 @@ module "talos_workers_jd" {
 # shares. Destroying this VM would take that zvol with it.
 ###############################################################################
 
+# Retired at the swap on 19 October 2026: demoted, stopped, renamed
+# JD-DC-01-old and kept off at boot. Delete it, and this resource, when
+# Jayden says.
 resource "proxmox_virtual_environment_vm" "jd_dc" {
-  name      = "JD-DC-01"
+  name      = "JD-DC-01-old"
   vm_id     = 1102
   node_name = local.nodes.jd.name
 
@@ -103,7 +106,9 @@ resource "proxmox_virtual_environment_vm" "jd_dc" {
 
   bios    = "ovmf"
   machine = "pc-q35-11.0+pve2"
-  on_boot = true
+  on_boot = false # retired
+  # Never start it: it would come up with the name and address of VM 1114.
+  started = false
 
   # Domain controller and file server. Same reasoning as JD-VyOS-01: attribute
   # writes must never trigger a restart behind your back.
