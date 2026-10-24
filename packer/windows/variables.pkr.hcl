@@ -13,10 +13,14 @@ variable "windows_image_name" {
   default     = "Windows Server 2025 Standard Evaluation (Desktop Experience)"
 }
 
+# Do not use a version that Proxmox lists as known to cause issues: 0.1.215 to
+# 0.1.262, and 0.1.285 (https://pve.proxmox.com/wiki/Windows_VirtIO_Drivers).
+# On Windows Server 2025 the 0.1.285 vioscsi and viostor drivers can return the
+# wrong data under load. 0.1.302 has the upstream fix.
 variable "virtio_iso_file" {
   type        = string
   description = "virtio-win driver ISO, already in the node's ISO storage."
-  default     = "local:iso/virtio-win-0.1.285.iso"
+  default     = "local:iso/virtio-win-0.1.302.iso"
 }
 
 variable "virtio_os_dir" {
