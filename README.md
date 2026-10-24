@@ -71,9 +71,12 @@ address, domain join, promotion) is LINDS-Ansible's
 `playbooks/windows-build.yml`.
 
 Both ISOs have to be on the host's `local` storage first: the Windows Server
-ISO, and `virtio-win-0.1.285.iso` from
-`https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/`. The build
-machine needs `xorriso` (the answer file travels on a generated CD).
+ISO, and `virtio-win-0.1.302.iso` from
+`https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.302-1/`.
+Do not use virtio-win 0.1.285: its storage drivers can return the wrong data
+on Windows Server 2025 (see the
+[Proxmox known issues](https://pve.proxmox.com/wiki/Windows_VirtIO_Drivers#Known_Issues)).
+The build machine needs `xorriso` (the answer file travels on a generated CD).
 
 ```shell
 cd packer/windows/
