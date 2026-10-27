@@ -10,6 +10,8 @@
 #   linds-tf-deploy --dry-run            plan and print what it would do
 #   linds-tf-deploy --dry-run --ref REF  the same for another branch or commit
 #   linds-tf-deploy --retry              deploy again a commit whose deploy failed
+#   linds-tf-deploy --previews           preview each open pull request on it
+#                                        (with a state folder of its own)
 #
 # Optional settings:
 #   LINDS_TF_DEPLOY_STATE           state, clone and caches (~/.local/state/linds-tf-deploy)
@@ -28,6 +30,7 @@ backend_config=${LINDS_TF_DEPLOY_BACKEND_CONFIG:-$HOME/LINDS-Terraform/proxmox/b
 repo_url=https://github.com/Jayden-Lind/LINDS-Terraform.git
 github_repo=Jayden-Lind/LINDS-Terraform
 status_context=deploy/proxmox
+preview_marker='<!-- linds-tf-preview -->'
 repo=$state_dir/repo
 
 # talos.tf gives the JD nodes the "amd" schematic and the LINDS nodes the
@@ -93,12 +96,14 @@ JQ
 
 usage() {
   cat <<'EOF'
-Usage: linds-tf-deploy [--dry-run [--ref REF]] [--retry]
+Usage: linds-tf-deploy [--dry-run [--ref REF]] [--retry] [--previews]
 
   (no options)   deploy origin/main, if it has not been deployed yet
   --dry-run      plan and print what a deploy would do; change nothing
   --ref REF      with --dry-run: a branch or commit instead of origin/main
-  --retry        deploy again a commit whose deploy failed
+  --retry        deploy again a commit whose deploy failed; with --previews,
+                 preview every open pull request again
+  --previews     preview each open pull request on it (see deploy/README.md)
 
 See deploy/README.md in LINDS-Terraform.
 EOF
@@ -293,6 +298,7 @@ plan_targets() { # LABEL TARGET...
   changes=$(jq -r "$list_changes" "$plan_json" | grep -v ' local_file\.' | grep -vxF -f "$run_dir/planned" || true)
   # The untargeted report leaves out what the deploy plans itself.
   printf '%s\n' "$changes" >> "$run_dir/planned"
+  [[ -z $changes ]] || awk -v step="$label" '{ print step "\t" $0 }' <<< "$changes" >> "$run_dir/summary-steps"
   if [[ -n $changes ]]; then
     log "Plan for the $label:"
     sed -n '/Terraform will perform the following actions/,/^Plan: /p' "$run_dir/plan.log"
@@ -488,6 +494,7 @@ upgrade_talos() {
   for entry in "${todo[@]}"; do
     read -r name _ image running <<< "$entry"
     log "  $name: $running -> ${image##*:}"
+    printf '%s: %s -> %s\n' "$name" "$running" "${image##*:}" >> "$run_dir/summary-talos"
   done
   if $dry_run; then
     did+=("Talos ${image##*:} on ${#todo[@]} node(s)")
@@ -531,7 +538,216 @@ report_untargeted() {
   log "Left for a manual apply (outside what the deploy applies):"
   # shellcheck disable=SC2001 # indents every line
   sed 's/^/  /' <<< "$left"
+  printf '%s\n' "$left" > "$run_dir/summary-left"
   notes+=("$(wc -l <<< "$left") change(s) left for a manual apply")
+}
+
+# --- previews of pull requests ------------------------------------------------
+
+# Each open pull request from a branch of this repository gets a preview: a
+# dry run of the commit that a merge into main makes. The preview is one
+# comment on the pull request and the commit status preview/proxmox. It names
+# resources only. The repository is public, and a plan can hold secrets, so the
+# plans stay in the logs of the state folder. The previews have a state folder
+# of their own (see linds-tf-preview.service): a preview never holds the lock of
+# the deploy.
+
+post_status() { # SHA STATE DESCRIPTION
+  gh api --method POST "repos/$github_repo/statuses/$1" \
+    -f state="$2" -f context=preview/proxmox -f description="${3:0:140}" > /dev/null 2>&1 ||
+    log "warning: could not set the commit status preview/proxmox on GitHub"
+}
+
+# Writes the preview comment of pull request NUMBER: a new comment the first
+# time, then the same comment again.
+post_comment() { # NUMBER FILE
+  local id
+  id=$(gh api --paginate "repos/$github_repo/issues/$1/comments" \
+    --jq ".[] | select(.body | startswith(\"$preview_marker\")) | .id") || id=
+  id=${id%%$'\n'*}
+  if [[ -n $id ]]; then
+    jq -n --rawfile body "$2" '{body: $body}' |
+      gh api --method PATCH "repos/$github_repo/issues/comments/$id" --input - > /dev/null ||
+      log "warning: could not change the preview comment on #$1"
+  else
+    jq -n --rawfile body "$2" '{body: $body}' |
+      gh api --method POST "repos/$github_repo/issues/$1/comments" --input - > /dev/null ||
+      log "warning: could not write the preview comment on #$1"
+  fi
+}
+
+# A dry run of SHA, with its summary in FILE. The output of the dry run, the
+# plans too, goes to a file in logs/.
+dry_run_summary() { # SHA FILE NAME
+  local copy log_file
+  mkdir -p "$state_dir/logs"
+  log_file=$state_dir/logs/$(date +%Y%m%d-%H%M%S)-${1:0:7}-$3.log
+  copy=$(mktemp "$state_dir/linds-tf-deploy.XXXXXX")
+  cat -- "$self" > "$copy"
+  LINDS_TF_DEPLOY_SHA=$1 LINDS_TF_DEPLOY_SUMMARY=$2 bash "$copy" --dry-run > "$log_file" 2>&1 || true
+  rm -f -- "$copy"
+  [[ -s $2 && $(jq -r .sha "$2" 2> /dev/null) == "$1" ]] ||
+    jq -n --arg sha "$1" --arg why "the dry run stopped before its summary (see $log_file)" \
+      '{sha: $sha, ok: false, failure: $why, steps: [], talos: [], left: [], did: [], notes: []}' > "$2"
+}
+
+# The dry run of main, which a preview compares with, once for each commit.
+main_summary() {
+  local file=$state_dir/main.json
+  if [[ $(jq -r '.sha // empty' "$file" 2> /dev/null || true) != "$main_sha" ]]; then
+    log "Dry run of main ${main_sha:0:7}, to compare the pull requests with" >&2
+    dry_run_summary "$main_sha" "$file" main
+  fi
+  printf '%s\n' "$file"
+}
+
+# From the summary of a pull request and that of main: the comment (MODE
+# comment), or the state and the description of the commit status (MODE
+# status, one line each). A preview shows what the pull request adds to main.
+read -r -d '' preview_jq <<'JQ' || true
+($pr[0]) as $p | ($main[0]) as $m
+| ($p.steps - $m.steps) as $steps
+| ($p.talos - $m.talos) as $talos
+| ($p.left - $m.left) as $left
+| (($p.left | length) - ($left | length)) as $old_left
+| ($steps | reduce .[].step as $s ([]; if index([$s]) then . else . + [$s] end)) as $step_names
+| if $mode == "status" then
+    if ($p.ok | not) then "failure", "The deploy stops: \($p.failure)"
+    else "success",
+      ([ (if ($step_names | length) > 0 then "Applies: \($step_names | join(", "))" else empty end),
+         (if ($talos | length) > 0 then "Talos upgrades on \($talos | length) node(s)" else empty end),
+         (if ($left | length) > 0 then "\($left | length) change(s) left for a manual apply" else empty end) ]
+       | if length == 0 then "No change" else join("; ") end)
+    end
+  else
+    [ $marker,
+      "**Deploy preview:** what a merge of this pull request does. Planned on jd-jump-01 at \($when), on `\($target)`: this pull request merged into `main` at `\($main_sha)`.",
+      "",
+      (if ($step_names | length) > 0 or ($talos | length) > 0 then
+         "**The deploy applies:**",
+         ($step_names[] as $s | "- \($s):", ($steps[] | select(.step == $s) | "  - `\(.change)`")),
+         (if ($talos | length) > 0 then "- Talos upgrades, in this order:", ($talos[] | "  - \(.)") else empty end),
+         ""
+       elif $p.ok then "**The deploy applies nothing.**", ""
+       else empty end),
+      (if ($p.ok | not) then "**The deploy stops:** \($p.failure)", "" else empty end),
+      (if ($left | length) > 0 then
+         "**Left for a manual apply.** The deploy does not make these changes:",
+         ($left[] | "- `\(.)`"),
+         ""
+       else empty end),
+      (if $old_left > 0 then "\($old_left) other change(s) are already left for a manual apply on `main`.", "" else empty end),
+      (if ($m.ok | not) then "**NOTE:** The deploy of `main` stops now too: \($m.failure)", ""
+       elif ($m.steps | length) > 0 or ($m.talos | length) > 0 then
+         "**NOTE:** `main` has changes that the deploy has not applied yet. The next deploy applies them too.", ""
+       else empty end),
+      "The deploy looks for merges every six hours. To deploy at once after the merge, run `systemctl --user start linds-tf-deploy.service` on jd-jump-01.",
+      "",
+      "The full plans are in `~/.local/state/linds-tf-preview/logs/` on jd-jump-01. The preview runs again when the pull request or `main` changes. See `deploy/README.md`."
+    ] | .[]
+  end
+JQ
+
+preview_text() { # MODE SUMMARY MAIN_SUMMARY TARGET
+  jq -r -n --arg mode "$1" --slurpfile pr "$2" --slurpfile main "$3" --arg marker "$preview_marker" \
+    --arg when "$(date '+%Y-%m-%d %H:%M')" --arg target "${4:0:7}" --arg main_sha "${main_sha:0:7}" "$preview_jq"
+}
+
+remember() { # NUMBER VALUE
+  jq --arg n "$1" --arg v "$2" '.[$n] = $v' "$previews" > "$previews.new"
+  mv -f -- "$previews.new" "$previews"
+}
+
+preview_pull() { # NUMBER
+  local n=$1 pr head mergeable target title before body summary main_file
+  local -a status
+  pr=$(gh api "repos/$github_repo/pulls/$n")
+  head=$(jq -r '.head.sha' <<< "$pr")
+  mergeable=$(jq -r '.mergeable' <<< "$pr")
+  title=$(jq -r '.title' <<< "$pr")
+  before=$(jq -r --arg n "$n" '.[$n] // empty' "$previews")
+  [[ $mergeable != null ]] || return 0 # GitHub still makes the merge commit
+  if [[ $mergeable != true ]]; then
+    [[ $before != "conflict $head" ]] || return 0
+    log "#$n: conflicts with main; no preview"
+    post_status "$head" error "Conflicts with main: no preview"
+    remember "$n" "conflict $head"
+    return 0
+  fi
+  target=$(jq -r '.merge_commit_sha' <<< "$pr")
+  [[ $before != "$target" ]] || $retry || return 0
+  git -C "$repo" fetch --quiet origin "+refs/pull/$n/merge:refs/previews/$n" || return 0
+  [[ $(git -C "$repo" rev-parse "refs/previews/$n") == "$target" ]] || return 0 # the ref has not moved yet
+
+  log "Preview of #$n $title"
+  body=$state_dir/comment-$n.md
+  if git -C "$repo" diff --quiet "$main_sha" "$target" -- proxmox; then
+    printf '%s\n%s\n' "$preview_marker" \
+      "**Deploy preview:** this pull request changes nothing under \`proxmox/\`, so a merge deploys nothing." > "$body"
+    post_status "$head" success "Nothing under proxmox/ changes: a merge deploys nothing"
+  else
+    main_file=$(main_summary)
+    summary=$state_dir/pr-$n.json
+    dry_run_summary "$target" "$summary" "pr$n"
+    preview_text comment "$summary" "$main_file" "$target" > "$body"
+    mapfile -t status < <(preview_text status "$summary" "$main_file" "$target")
+    log "#$n: ${status[1]}"
+    post_status "$head" "${status[0]}" "${status[1]}"
+  fi
+  post_comment "$n" "$body"
+  remember "$n" "$target"
+}
+
+# Runs from launch_previews, from a copy of main's script, with the lock held.
+run_previews() {
+  local numbers n rc
+  self=$0
+  trap 'rm -f -- "$self"' EXIT
+  main_sha=$LINDS_TF_PREVIEW_MAIN
+  previews=$state_dir/previews.json
+  [[ -s $previews ]] || echo '{}' > "$previews"
+  # The timer starts the next poll from this clone: from main's script.
+  git -C "$repo" checkout --quiet --force --detach "$main_sha"
+  numbers=$(gh api "repos/$github_repo/pulls?state=open&per_page=100" \
+    --jq '.[] | select(.head.repo.full_name == .base.repo.full_name) | .number')
+  # Forget the pull requests that are closed.
+  jq --arg open "$numbers" 'with_entries(select(.key as $k | $open | split("\n") | index($k)))' \
+    "$previews" > "$previews.new"
+  mv -f -- "$previews.new" "$previews"
+  for n in $numbers; do
+    # A failed preview stops only itself.
+    set +e
+    (
+      set -e
+      preview_pull "$n"
+    )
+    rc=$?
+    set -e
+    ((rc == 0)) || log "warning: the preview of #$n stopped (exit $rc)"
+  done
+  find "$state_dir/logs" -type f -mtime +30 -delete 2> /dev/null || true
+}
+
+# Runs from the timer: takes the lock, fetches, and hands over to a copy of
+# main's script. The pull requests' own scripts never run here.
+launch_previews() {
+  local copy main
+  mkdir -p "$state_dir"
+  chmod 700 "$state_dir"
+  exec 9>> "$state_dir/lock"
+  if ! flock --nonblock 9; then
+    log "A preview is already running."
+    exit 0
+  fi
+  [[ -d $repo/.git ]] || git clone --quiet "$repo_url" "$repo"
+  if ! git -C "$repo" fetch --quiet --prune origin; then
+    log "Cannot fetch from GitHub; the next poll tries again."
+    exit 1
+  fi
+  main=$(git -C "$repo" rev-parse --verify "origin/main^{commit}")
+  copy=$(mktemp "$state_dir/linds-tf-deploy.XXXXXX")
+  git -C "$repo" show "$main:deploy/linds-tf-deploy" > "$copy"
+  LINDS_TF_PREVIEW_MAIN=$main exec bash "$copy" "${args[@]}"
 }
 
 # --- entry points -----------------------------------------------------------
@@ -579,7 +795,7 @@ launch() {
 }
 
 finish() {
-  local code=$? why
+  local code=$? why ok
   if $dry_run && [[ -n ${restore:-} ]]; then
     git -C "$repo" checkout --quiet --force --detach "$restore" || true
   fi
@@ -593,7 +809,28 @@ finish() {
       raise_alert "${sha:0:7} failed: $why"
     fi
   fi
+  ok=false
+  ((code != 0)) || ok=true
+  write_summary "$ok" "${why:-}"
   rm -rf -- "$run_dir"
+}
+
+# With LINDS_TF_DEPLOY_SUMMARY set, a run writes what it found to that file as
+# JSON: ok, failure, the changes of each step, the Talos upgrades, what is left
+# for a manual apply, and the did and notes of the summary line.
+write_summary() { # OK WHY
+  [[ -n ${LINDS_TF_DEPLOY_SUMMARY:-} && -d ${run_dir:-} ]] || return 0
+  printf '%s\n' "${did[@]}" > "$run_dir/summary-did"
+  printf '%s\n' "${notes[@]}" > "$run_dir/summary-notes"
+  jq -n --arg sha "$sha" --argjson ok "$1" --arg why "$2" \
+    --rawfile steps "$run_dir/summary-steps" --rawfile talos "$run_dir/summary-talos" \
+    --rawfile left "$run_dir/summary-left" --rawfile did "$run_dir/summary-did" \
+    --rawfile notes "$run_dir/summary-notes" '
+    def lines: split("\n") | map(select(length > 0));
+    {sha: $sha, ok: $ok, failure: $why,
+     steps: ($steps | lines | map(split("\t") | {step: .[0], change: .[1]})),
+     talos: ($talos | lines), left: ($left | lines), did: ($did | lines), notes: ($notes | lines)}' \
+    > "$LINDS_TF_DEPLOY_SUMMARY" || log "warning: could not write the summary"
 }
 
 run() {
@@ -601,7 +838,8 @@ run() {
   sha=$LINDS_TF_DEPLOY_SHA
   rm -f -- "$0"
   run_dir=$(mktemp -d "$state_dir/run.XXXXXX")
-  touch "$run_dir/planned"
+  touch "$run_dir/planned" "$run_dir/summary-steps" "$run_dir/summary-talos" "$run_dir/summary-left"
+  did=() notes=()
   stage="starting"
   trap finish EXIT
   trap 'fail "Stopped by a signal while $stage"' INT TERM
@@ -664,11 +902,12 @@ run() {
   log "$summary"
 }
 
-dry_run=false retry=false ref=
+dry_run=false retry=false previews_mode=false ref=
 args=("$@")
 while (($#)); do
   case $1 in
     --dry-run) dry_run=true ;;
+    --previews) previews_mode=true ;;
     --retry) retry=true ;;
     --ref)
       ref=${2:?--ref needs a branch or commit}
@@ -689,9 +928,17 @@ if [[ -n $ref ]] && ! $dry_run; then
   echo "--ref is for dry runs only: the deploy only applies main." >&2
   exit 2
 fi
+if $previews_mode && $dry_run; then
+  echo "--previews does not go with --dry-run." >&2
+  exit 2
+fi
 
 if [[ -n ${LINDS_TF_DEPLOY_SHA:-} ]]; then
   run
+elif $previews_mode && [[ -n ${LINDS_TF_PREVIEW_MAIN:-} ]]; then
+  run_previews
+elif $previews_mode; then
+  launch_previews
 else
   launch
 fi

@@ -1,0 +1,17 @@
+[Unit]
+Description=Preview what a merge of each open LINDS-Terraform pull request does (deploy/README.md)
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/state/linds-tf-preview/repo/deploy/linds-tf-deploy --previews
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+# A state folder of its own: a preview never holds the lock of the deploy.
+Environment=LINDS_TF_DEPLOY_STATE=%h/.local/state/linds-tf-preview
+SyslogIdentifier=linds-tf-preview
+# Each pull request takes a dry run of a few minutes; the first after a merge
+# also takes one of main.
+TimeoutStartSec=2h
+# Terraform and its providers need well under this. The cap keeps an OOM kill
+# inside this unit.
+MemoryMax=4G
+Nice=10
