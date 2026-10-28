@@ -18,7 +18,7 @@ locals {
   # yet. A patch release of the current minor (v1.37.0 -> v1.37.1 here) can go
   # in the same apply as the Talos bump; the control plane still goes first.
   talos_version      = "v1.14.5"
-  kubernetes_version = "v1.37.1"
+  kubernetes_version = "v1.37.2"
 
   # Version contract the machine config is *generated* against - which schema
   # and defaults the provider emits. It is not the installed Talos version and
