@@ -66,6 +66,13 @@ resource "proxmox_virtual_environment_vm" "jd_router" {
     floating  = 0 # ballooning off
   }
 
+  # KSM is off for this VM: `qm set 1101 --allow-ksm 0`, set by hand on
+  # 2026-11-06 because the provider has no attribute for it (it leaves the key
+  # alone). KSM merged only ~70 MB of the router's memory, its scan metadata
+  # cost more than that (ksm_process_profit -27 MB), and a merged page costs a
+  # copy-on-write fault on the next write. A VM rebuilt from this file needs
+  # the `qm set` again; it takes effect at the next stop and start.
+
   bios          = "ovmf"
   machine       = "q35"
   on_boot       = true
