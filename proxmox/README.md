@@ -23,9 +23,8 @@ and the Talos/Cilium cluster that runs across both.
 | `talos-schematic.tf` | Image factory schematics (AMD + Intel) |
 | `talos.tf` | Machine config, bootstrap, kubeconfig |
 | `cilium.tf` | Helm release and BGP custom resources |
-| `imports.tf` | Adoption of pre-existing infrastructure |
-| `removed.tf` | State-only removals for the deprecated network resource names |
-| `moved.tf` | Address migrations from the pre-refactor layout |
+| `guests-adopted.tf` | Guests made by hand or by Packer, adopted 2026-11-07: LINDS-Truenas-01, JD-Backup-01, the switched-off -old VMs and the templates |
+| `imports.tf` | Adoption of pre-existing infrastructure (the guests in `guests-adopted.tf`) |
 
 ## Usage
 
