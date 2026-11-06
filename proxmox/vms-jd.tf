@@ -584,12 +584,13 @@ resource "proxmox_virtual_environment_vm" "jd_torrent" {
     interface    = "scsi0"
     size         = 16
     cache        = "none"
-    # Was discard=ignore/ssd=0 on a ZFS-backed SSD pool, so guest TRIM never
-    # reached the zvol and deleted torrent data was never freed. Matches the
-    # other guests on ssd-mixed.
-    discard  = "on"
+    # As live (2026-11-07): discard=ignore, ssd=0. So guest TRIM does not reach
+    # the zvol, and deleted torrent data is not freed. To change that, set
+    # discard = "on" and ssd = true, as the other guests on ssd-mixed have, and
+    # apply. The apply reboots the VM (reboot_after_update is the default).
+    discard  = "ignore"
     iothread = true
-    ssd      = true
+    ssd      = false
   }
 
   clone {
@@ -645,16 +646,22 @@ resource "proxmox_virtual_environment_vm" "jd_jump" {
     enabled = true
   }
 
+  # 8 cores and 16 GiB, as live (raised by hand from 4 and 8 GiB). The flags
+  # are local.guest_cpu_flags in the order this VM has them: the provider
+  # compares the list in order, and a new order means a restart.
   cpu {
     type         = "host"
     architecture = "x86_64"
-    cores        = 4
-    flags        = local.guest_cpu_flags
-    numa         = true
+    cores        = 8
+    flags = [
+      "-md-clear", "-spec-ctrl", "-amd-no-ssb", "-hv-evmcs", "+aes", "-amd-ssbd",
+      "-hv-tlbflush", "-ibpb", "-pcid", "+pdpe1gb", "-ssbd", "-virt-ssbd",
+    ]
+    numa = true
   }
 
   memory {
-    dedicated = 8192
+    dedicated = 16384
     floating  = 0 # ballooning off
   }
 
@@ -955,5 +962,16 @@ resource "proxmox_virtual_environment_file" "jump_cloud_config" {
         - runuser -u jayden -- env XDG_RUNTIME_DIR=/run/user/$(id -u jayden) systemctl --user enable claude-remote-control.service
     EOF
     file_name = "jd-jump-01.cloud-config.yaml"
+  }
+
+  # The file on the host is the one JD-Jump-01 was built from; this text is
+  # what a rebuild gets. Do not rewrite the file in place: Proxmox makes the
+  # cloud-init instance-id from its content (sha1 of user + network data), so
+  # cloud-init would run again at the next boot (new SSH host keys, users and
+  # packages applied again). For a rebuild, replace both:
+  #   -replace=proxmox_virtual_environment_file.jump_cloud_config
+  #   -replace=proxmox_virtual_environment_vm.jd_jump
+  lifecycle {
+    ignore_changes = [source_raw]
   }
 }
