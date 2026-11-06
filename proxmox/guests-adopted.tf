@@ -2,7 +2,8 @@
 # Guests made by hand or by Packer, adopted on 2026-11-07 (imports.tf)
 #
 # The attributes are what Proxmox reported at the import (terraform plan
-# -generate-config-out), so the import changed nothing. Each one has
+# -generate-config-out), so the import changed nothing. mac_addresses is left
+# out: the provider fills it from the guest agent while a VM runs. Each one has
 # prevent_destroy and reboot_after_update = false. Packer owns the templates
 # and rebuilds them: Terraform records them and ignores their changes.
 ###############################################################################
@@ -15,7 +16,6 @@ resource "proxmox_virtual_environment_vm" "jd_ubuntu_template" {
   delete_unreferenced_disks_on_destroy = true
   description                          = "Ubuntu 26.04 LTS, built by Packer"
   keyboard_layout                      = "en-us"
-  mac_addresses                        = ["7A:5B:63:9F:6F:DD"]
   machine                              = "q35"
   migrate                              = false
   name                                 = "ubuntu"
@@ -107,7 +107,6 @@ resource "proxmox_virtual_environment_vm" "jd_windows_template" {
   delete_unreferenced_disks_on_destroy = true
   description                          = "Windows Server 2025 Standard Evaluation (Desktop Experience), built by Packer"
   keyboard_layout                      = "en-us"
-  mac_addresses                        = ["4E:5B:AC:43:4D:23"]
   machine                              = "pc-q35-11.0+pve2"
   migrate                              = false
   name                                 = "windows-server-2025"
@@ -207,7 +206,6 @@ resource "proxmox_virtual_environment_vm" "jd_backup" {
   delete_unreferenced_disks_on_destroy = true
   description                          = "Backblaze Personal Backup of the NAS (LINDS-Ansible roles/backblaze). Moved from linds-proxmox-01 VM 104 (LINDS-Backup) on 2026-11-04. backblaze-run.timer starts it once a week with a ZFS clone of jd-fs-01 D: as scsi1. Never attach the live NAS-SSD:vm-1113-disk-0."
   keyboard_layout                      = "en-us"
-  mac_addresses                        = ["BC:24:11:0A:ED:0C"]
   machine                              = "pc-q35-8.1"
   migrate                              = false
   name                                 = "JD-Backup-01"
@@ -309,7 +307,6 @@ resource "proxmox_virtual_environment_vm" "linds_truenas" {
   boot_order                           = ["scsi0"]
   delete_unreferenced_disks_on_destroy = true
   keyboard_layout                      = "en-us"
-  mac_addresses                        = ["BC:24:11:A0:0E:76"]
   machine                              = "q35"
   migrate                              = false
   name                                 = "LINDS-Truenas-01"
@@ -430,7 +427,6 @@ resource "proxmox_virtual_environment_vm" "linds_dc_old" {
   boot_order                           = ["scsi0", "scsi1", "sata0"]
   delete_unreferenced_disks_on_destroy = true
   keyboard_layout                      = "en-us"
-  mac_addresses                        = ["BC:24:11:A0:0E:77"]
   machine                              = "pc-q35-10.1"
   migrate                              = false
   name                                 = "LINDS-DC-old"
@@ -547,7 +543,6 @@ resource "proxmox_virtual_environment_vm" "linds_backup_old" {
   delete_unreferenced_disks_on_destroy = true
   description                          = "OLD Backblaze VM, kept switched off as a fallback. Since 2026-11-06 the Backblaze runs are on jd-proxmox-02 (VM 1115 JD-Backup-01, ZFS clone of jd-fs-01 D:, LINDS-Ansible roles/backblaze). scsi1 is NAS:vm-102-disk-0, the live disk of linds-dc (VM 113): never start this VM while 113 runs. Delete it when Jayden says."
   keyboard_layout                      = "en-us"
-  mac_addresses                        = ["BC:24:11:0A:ED:0C"]
   machine                              = "pc-q35-8.1"
   migrate                              = false
   name                                 = "LINDS-Backup-old"
@@ -664,7 +659,6 @@ resource "proxmox_virtual_environment_vm" "linds_dc2_old" {
   boot_order                           = ["scsi0"]
   delete_unreferenced_disks_on_destroy = true
   keyboard_layout                      = "en-us"
-  mac_addresses                        = ["BC:24:11:CE:01:4C"]
   machine                              = "q35"
   migrate                              = false
   name                                 = "LINDS-DC2-old"
@@ -760,7 +754,6 @@ resource "proxmox_virtual_environment_vm" "linds_centos_template" {
   delete_unreferenced_disks_on_destroy = true
   description                          = "packer generated centos-9"
   keyboard_layout                      = "en-us"
-  mac_addresses                        = ["E6:E1:07:48:B7:1E"]
   machine                              = "q35"
   migrate                              = false
   name                                 = "centos-9"
@@ -862,7 +855,6 @@ resource "proxmox_virtual_environment_vm" "linds_ubuntu_template" {
   delete_unreferenced_disks_on_destroy = true
   description                          = "packer generated ubuntu"
   keyboard_layout                      = "en-us"
-  mac_addresses                        = ["F2:7E:38:25:6F:13"]
   machine                              = "q35"
   migrate                              = false
   name                                 = "ubuntu"
@@ -955,7 +947,6 @@ resource "proxmox_virtual_environment_vm" "linds_ubuntu26_template" {
   delete_unreferenced_disks_on_destroy = true
   description                          = "packer generated ubuntu 26.04"
   keyboard_layout                      = "en-us"
-  mac_addresses                        = ["F6:78:33:A5:E6:7B"]
   machine                              = "q35"
   migrate                              = false
   name                                 = "ubuntu-26"
@@ -1048,7 +1039,6 @@ resource "proxmox_virtual_environment_vm" "linds_windows_template" {
   delete_unreferenced_disks_on_destroy = true
   description                          = "Windows Server 2025 Standard Evaluation (Desktop Experience), built by Packer"
   keyboard_layout                      = "en-us"
-  mac_addresses                        = ["5A:E4:FD:E7:7D:F1"]
   machine                              = "pc-q35-11.0+pve2"
   migrate                              = false
   name                                 = "windows-server-2025"
