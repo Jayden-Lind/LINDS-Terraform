@@ -38,6 +38,9 @@ resource "proxmox_storage_zfspool" "ssd_mixed" {
   id       = "ssd-mixed"
   zfs_pool = "VM"
   content  = ["rootdir", "images"]
+  # New zvols are sparse: the host's storage.cfg has "sparse 1". Without
+  # this line, an apply turns it off again.
+  thin_provision = true
 }
 
 # NAS-SSD: 5-wide raidz1 of 4 TB SATA SSDs.
