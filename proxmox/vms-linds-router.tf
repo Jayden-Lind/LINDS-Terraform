@@ -1,5 +1,6 @@
 ###############################################################################
-# LINDS-Router-01 (114) - Debian 13 replacement for LINDS-VyOS (VM 101)
+# LINDS-Router-01 (114) - the LINDS router, Debian 13. It replaced LINDS-VyOS
+# (VM 101) on 2026-11-06.
 #
 # The same build as JD-Router-01 (vms-jd-router.tf), on linds-proxmox-01:
 #
@@ -15,13 +16,11 @@
 #
 # The guest names its interfaces by MAC (systemd .link files in LINDS-Ansible
 # roles/router/files/linds), so Proxmox device order is irrelevant to the
-# config. The MACs are this VM's own, not LINDS-VyOS's: the two can never be
-# mistaken for each other on the wire, and VyOS gets its old leases back if
-# it has to be started again.
+# config. The MACs are this VM's own, not LINDS-VyOS's.
 #
-# LINDS-VyOS (VM 101) was made by hand and is not in this state. Nothing here
-# touches it; shutting it down at cutover and deleting it afterwards are
-# `qm` commands (LINDS-Ansible roles/router/README.md has the order).
+# LINDS-VyOS (VM 101) was made by hand and was never in this state. It was
+# deleted on 2026-11-06. Its last backup is in `local`:
+# vzdump-qemu-101-2026_11_06-21_54_49.vma.zst.
 #
 # Apply with targets, as always in this module (README, "Usage"):
 #   terraform apply \
@@ -103,9 +102,12 @@ resource "proxmox_virtual_environment_vm" "linds_router" {
   # Site router. Attribute writes must never restart it.
   reboot_after_update = false
 
-  # First up, as LINDS-VyOS is. Both carry order 1 until VM 101 is retired;
-  # the cutover sets VM 101's onboot off so a host reboot cannot start two
-  # routers with the same addresses.
+  # Proxmox refuses to remove this VM or its disks (web UI, `qm destroy`).
+  # To restore a backup over it, first run `qm set 114 --protection 0`.
+  protection = true
+
+  # First up: the other guests on this host need it for DHCP, DNS and the
+  # tunnel to JD.
   startup {
     order = "1"
   }
@@ -158,7 +160,7 @@ resource "proxmox_virtual_environment_vm" "linds_router" {
   # net0 - management, VLAN 300 (servers): what the router was built through.
   # Link-down since the cutover (the guest's own lan0.300 holds 10.3.1.1 on
   # this very network) and kept in the list rather than removed, so the two
-  # NICs below keep their numbers. A rollback to LINDS-VyOS brings it back up.
+  # NICs below keep their numbers.
   network_device {
     bridge       = "vmbr0"
     model        = "virtio"
@@ -199,9 +201,9 @@ resource "proxmox_virtual_environment_vm" "linds_router" {
     ignore_changes = [
       # The image is only read at create time.
       disk[0].import_from,
-      # Which links are up was the cutover's to decide, on the host, with a
-      # rollback (linds-router-cutover), and still is. The values above
-      # record how the cutover left them; they are not enforced.
+      # Which links are up is set on the host (`qm set 114 --netN`). The
+      # values above record the state since the cutover; an apply does not
+      # enforce them, so it cannot take the site's LAN or WAN down.
       network_device[0].disconnected,
       network_device[1].disconnected,
       network_device[2].disconnected,
