@@ -3,7 +3,15 @@
 #
 # Physical NICs are a dual-port ConnectX-4 Lx:
 #   ens5f1np1 -> vmbr0 (LAN, VLAN aware)
-#   ens5f0np0 -> vmbr1 (WAN, handed to JD-VyOS-01)
+#   ens5f0np0 -> no bridge (WAN). The router VM 1101 has VF 0 of this port
+#                as its wan0 (hostpci0 in vms-jd-router.tf).
+#
+# There is no WAN bridge. `vmbr1` was removed on 2026-11-10: no guest used
+# it, and a bridge on the PF kept the host attached to the WAN segment. Do
+# not add it back. The PF stanza in /etc/network/interfaces (`auto`, and a
+# pre-up line that disables IPv6 on the PF) and the VF settings
+# (/usr/local/sbin/sriov-wan-setup.sh: MAC, trust off, spoofchk on) are not
+# expressible through the Proxmox API and live only on the host.
 #
 # The ethtool tuning applied to ens5f1np1 in /etc/network/interfaces is not
 # expressible through the Proxmox API and lives only in that file's post-up
@@ -42,12 +50,4 @@ resource "proxmox_network_linux_vlan" "storage_vlan53" {
   comment   = "k8s storage - direct L2 to VLAN 53"
 
   address = "10.0.53.246/24"
-}
-
-resource "proxmox_network_linux_bridge" "wan" {
-  node_name = local.nodes.jd.name
-  name      = "vmbr1"
-  comment   = "WAN"
-
-  ports = ["ens5f0np0"]
 }

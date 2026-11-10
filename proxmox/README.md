@@ -14,7 +14,7 @@ and the Talos/Cilium cluster that runs across both.
 | `storage.tf` | Proxmox storage *registrations* (`local`, `local-lvm`, the three ZFS pools) |
 | `nfs.tf` | `/etc/exports` — the only host-level thing Terraform writes |
 | `templates/` | Rendered scripts used by `nfs.tf` |
-| `network.tf` | `vmbr0` / `vmbr1` / `vmbr0.53` |
+| `network.tf` | `vmbr0` / `vmbr0.53` (the WAN port has no bridge) |
 | `vms-jd.tf` | JD site guests |
 | `vms-jd-router.tf` | JD-Router-01 (1101), the Debian router replacing JD-VyOS-01; image download + cloud-init snippet |
 | `vms-linds.tf` | LINDS site guests |
