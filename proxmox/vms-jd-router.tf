@@ -86,6 +86,19 @@ resource "proxmox_virtual_environment_vm" "jd_router" {
     order = "1"
   }
 
+  # A virtual watchdog. systemd in the guest writes to it every 15 s
+  # (RuntimeWatchdogSec=30, LINDS-Ansible roles/router). If the guest kernel
+  # stops, QEMU resets the VM, and the site gets its router back without a
+  # person. A change here is only pending until the next stop and start of
+  # the VM (reboot_after_update is false), and a reboot from inside the guest
+  # does not apply it. Set by hand on 2026-11-10 (`qm set 1101 --watchdog
+  # i6300esb,action=reset`).
+  watchdog {
+    enabled = true
+    model   = "i6300esb"
+    action  = "reset"
+  }
+
   efi_disk {
     datastore_id      = local.datastores.jd
     type              = "4m"
