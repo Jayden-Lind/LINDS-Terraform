@@ -3,7 +3,12 @@
 #
 # Single control plane at 10.0.53.200, four workers at .201-.204 on the JD
 # site, two workers at 10.3.1.100-101 on the LINDS site. Scheduling is allowed
-# on the control plane.
+# on the control plane, but a soft taint keeps ordinary pods off it when a
+# worker has room (talos_cp_config).
+#
+# Each node has a static address, hostname and resolver (talos_node_config).
+# The Kea reservations on the site routers stay: a node in maintenance mode
+# (booted from the ISO, no config yet) still gets its address from them.
 ###############################################################################
 
 locals {
@@ -44,6 +49,99 @@ locals {
   worker_nodes_jd   = [for i in range(4) : "10.0.53.${201 + i}"]
   worker_nodes_lind = [for i in range(2) : "10.3.1.${100 + i}"]
 
+  # Per-site network values. They are the values that DHCP gave the nodes
+  # until 2026-11-10, so the change to static addresses changed no address,
+  # route or resolver.
+  #
+  # ntp: the site router is first. It runs chrony, follows the internet
+  # sources itself, and continues to serve time when the WAN is down, so the
+  # nodes of a site stay in step with each other. The internet servers stay
+  # as the fallback for when the router does not answer.
+  talos_sites = {
+    jd = {
+      subnet      = "10.0.53.0/24"
+      gateway     = "10.0.53.1"
+      nameservers = ["10.0.53.1"]
+      ntp         = ["10.0.53.1", "time.cloudflare.com", "pool.ntp.org"]
+    }
+    linds = {
+      subnet      = "10.3.1.0/24"
+      gateway     = "10.3.1.1"
+      nameservers = ["10.3.1.1", "10.3.1.200"]
+      ntp         = ["10.3.1.1", "time.cloudflare.com", "pool.ntp.org"]
+    }
+  }
+
+  # Node address => hostname and site. The hostname is the Kubernetes node
+  # name. NEVER change a hostname here: the kubelet would register a second
+  # Node object and the pods, volumes and labels of the old one would not
+  # follow.
+  talos_nodes = merge(
+    { (local.controlplane_node) = { hostname = "talos-cp", site = "jd" } },
+    { for i, ip in local.worker_nodes_jd : ip => { hostname = format("talos-worker-%02d", i + 1), site = "jd" } },
+    { for i, ip in local.worker_nodes_lind : ip => { hostname = format("talos-linds-worker-%02d", i + 1), site = "linds" } },
+  )
+
+  # The per-node patch: everything that differs between nodes or sites.
+  #
+  # Why static. With DHCP, the address of the API endpoint (10.0.53.200)
+  # depended on Kea on jd-router-01, which is a VM on the same host as the
+  # control plane. After a cold start with the router down, or a router
+  # outage longer than the lease, the nodes had no address and could not
+  # reach each other on their own VLAN.
+  #
+  # `interface = "ens18"` is the single virtio NIC that the talos-node module
+  # gives each VM. The route metric 1024 is the one the DHCP route had.
+  #
+  # nodeIP.validSubnets makes the kubelet take its node IP from the node
+  # subnet only, never from an address that Cilium or a later interface adds.
+  talos_node_config = {
+    for ip, node in local.talos_nodes : ip => {
+      machine = {
+        network = {
+          interfaces = [
+            {
+              interface = "ens18"
+              dhcp      = false
+              addresses = ["${ip}/${split("/", local.talos_sites[node.site].subnet)[1]}"]
+              routes = [
+                {
+                  network = "0.0.0.0/0"
+                  gateway = local.talos_sites[node.site].gateway
+                  metric  = 1024
+                }
+              ]
+            }
+          ]
+          nameservers   = local.talos_sites[node.site].nameservers
+          searchDomains = ["linds.com.au"]
+        }
+        time = {
+          servers = local.talos_sites[node.site].ntp
+        }
+        kubelet = {
+          nodeIP = {
+            validSubnets = [local.talos_sites[node.site].subnet]
+          }
+        }
+      }
+    }
+  }
+
+  # The hostname is a separate document. The base config has a
+  # HostnameConfig with `auto: stable` (a name made from the machine ID,
+  # used only when DHCP gives no name), and machine.network.hostname cannot
+  # be set next to it. `auto: off` is necessary: a patch that only adds
+  # `hostname` leaves both set, and Talos rejects that.
+  talos_node_hostname_config = {
+    for ip, node in local.talos_nodes : ip => {
+      apiVersion = "v1alpha1"
+      kind       = "HostnameConfig"
+      auto       = "off"
+      hostname   = "${node.hostname}.linds.com.au"
+    }
+  }
+
   talos_common_config = {
     machine = {
       install = {
@@ -57,6 +155,40 @@ locals {
           # drained node coming back was serialising 15+ pulls.
           serializeImagePulls   = false
           maxParallelImagePulls = 5
+
+          # Talos reserves 512Mi of memory for everything that is not a pod.
+          # Measured on 2026-11-10 (talosctl cgroups --preset=memory), the
+          # init, system and podruntime groups (kubelet, containerd, the
+          # Talos services) together held 1.2 GiB on a worker and 2.9 GiB on
+          # the control plane, with peaks of 2.5 to 2.8 GiB. The scheduler
+          # therefore thought each 16 GiB node had about 1 GiB more for pods
+          # than it has. Part of that memory is page cache which the kernel
+          # can take back, so 1536Mi is the reservation, not the peak.
+          #
+          # The other three values are the Talos defaults. A map in
+          # extraConfig replaces the default map, so they are repeated.
+          systemReserved = {
+            cpu                 = "50m"
+            memory              = "1536Mi"
+            "ephemeral-storage" = "256Mi"
+            pid                 = "100"
+          }
+          # The kubelet default starts to evict pods when 100Mi is free. On a
+          # 16 GiB node that is too late: the kernel OOM killer comes first
+          # and does not choose by pod priority. The four disk values are
+          # the kubelet defaults, repeated for the same reason as above.
+          evictionHard = {
+            "memory.available"   = "500Mi"
+            "nodefs.available"   = "10%"
+            "nodefs.inodesFree"  = "5%"
+            "imagefs.available"  = "15%"
+            "imagefs.inodesFree" = "5%"
+          }
+          # No pod could start more than this number of processes and
+          # threads. Without a limit (-1) one pod can use every PID of the
+          # node. On 2026-11-10 all the pods of the busiest node together
+          # had a peak of 1034.
+          podPidsLimit = 4096
         }
       }
       # Declarative replacement for the old node_labels local-exec hack.
@@ -129,20 +261,7 @@ locals {
         "vm.zone_reclaim_mode"            = "0"
         "vm.page_lock_unfairness"         = "1"
       }
-      network = {
-        interfaces = [
-          {
-            interface = "lo"
-            addresses = ["169.254.116.108/32"]
-          }
-        ]
-      }
-      time = {
-        servers = [
-          "time.cloudflare.com",
-          "pool.ntp.org"
-        ]
-      }
+      # machine.network and machine.time are in talos_node_config.
     }
 
     cluster = {
@@ -178,6 +297,21 @@ locals {
   })
 
   talos_cp_config = {
+    # A soft taint. The scheduler puts a pod on the control plane only when
+    # no worker can take it. Pods that are there already stay until they
+    # restart, and DaemonSet pods are not affected.
+    #
+    # Why: this node is also etcd and the API server, on a disk with slow
+    # fsync. Prometheus, Keycloak and others had landed on it (61% of its
+    # memory on 2026-11-10), and workloads on this node have stalled etcd
+    # before. A hard NoSchedule taint (allowSchedulingOnControlPlanes =
+    # false) is not used: when the JD workers are full or drained, the
+    # control plane must still be able to take pods.
+    machine = {
+      nodeTaints = {
+        "node-role.kubernetes.io/control-plane" = ":PreferNoSchedule"
+      }
+    }
     cluster = {
       allowSchedulingOnControlPlanes = true
       # There is one control plane node, so there is never a second
@@ -284,6 +418,9 @@ locals {
                 warn              = "baseline"
                 "warn-version"    = "latest"
               }
+              # These empty lists do not empty the lists of the base config:
+              # a patch cannot remove list entries. The base config exempts
+              # kube-system, and that exemption is still live.
               exemptions = {
                 namespaces     = []
                 runtimeClasses = []
@@ -368,6 +505,8 @@ resource "talos_machine_configuration_apply" "controlplane" {
 
   config_patches = [
     yamlencode(local.talos_common_config),
+    yamlencode(local.talos_node_config[local.controlplane_node]),
+    yamlencode(local.talos_node_hostname_config[local.controlplane_node]),
     yamlencode(local.talos_cp_config),
     yamlencode(local.talos_trim_config),
   ]
@@ -385,6 +524,8 @@ resource "talos_machine_configuration_apply" "worker" {
 
   config_patches = [
     yamlencode(local.talos_common_config),
+    yamlencode(local.talos_node_config[local.worker_nodes_jd[count.index]]),
+    yamlencode(local.talos_node_hostname_config[local.worker_nodes_jd[count.index]]),
     yamlencode(local.talos_trim_config),
   ]
 
@@ -401,6 +542,8 @@ resource "talos_machine_configuration_apply" "worker_linds" {
 
   config_patches = [
     yamlencode(local.talos_common_config_linds),
+    yamlencode(local.talos_node_config[local.worker_nodes_lind[count.index]]),
+    yamlencode(local.talos_node_hostname_config[local.worker_nodes_lind[count.index]]),
     yamlencode(local.talos_trim_config),
   ]
 

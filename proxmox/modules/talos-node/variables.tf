@@ -1,5 +1,5 @@
 variable "nodes" {
-  description = "Talos VMs to create, keyed by VM name. Values carry the pinned MAC (Talos nodes get their IP from a DHCP reservation keyed on it)."
+  description = "Talos VMs to create, keyed by VM name. Values carry the pinned MAC. An installed node has a static address (talos.tf); the DHCP reservation keyed on the MAC gives the address only in maintenance mode."
   type = map(object({
     mac_address = string
   }))
