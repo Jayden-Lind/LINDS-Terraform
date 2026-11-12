@@ -204,7 +204,7 @@ resource "proxmox_virtual_environment_vm" "jd_backup" {
   bios                                 = "ovmf"
   boot_order                           = ["scsi0"]
   delete_unreferenced_disks_on_destroy = true
-  description                          = "Backblaze Personal Backup of the NAS (LINDS-Ansible roles/backblaze). Moved from linds-proxmox-01 VM 104 (LINDS-Backup) on 2026-11-04. backblaze-run.timer starts it once a week with a ZFS clone of jd-fs-01 D: as scsi1. Never attach the live NAS-SSD:vm-1113-disk-0."
+  description                          = "Backblaze Personal Backup of the NAS (LINDS-Ansible roles/backblaze). Moved from linds-proxmox-01 VM 104 (LINDS-Backup) on 2026-11-04. backblaze-run.timer starts it once a week with a ZFS clone of jd-fs-01 D: as scsi1. Never attach the live NAS-SSD:vm-1113-disk-1."
   keyboard_layout                      = "en-us"
   machine                              = "pc-q35-8.1"
   migrate                              = false

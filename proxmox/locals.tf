@@ -18,6 +18,17 @@ locals {
   # comes from the template on its own node.
   windows_template_vm_id = 160
 
+  # The CPU of jd-proxmox-02 (EPYC 7B13) has eight groups of eight cores.
+  # Each group (CCD) has its own 32 MB L3 cache. A VM that stays on one CCD
+  # keeps its data in one cache. Measured on JD-Jump-01 on 2026-11-13:
+  # pgbench was 53% faster on one CCD than on all CPUs. The value is the CPU
+  # list of one CCD: the eight cores and their second threads.
+  #
+  # CCD 0: JD-Jump-01, JD-DC-01, JD-Torrent-01. CCD 1: JD-Router-01, which
+  # uses the cores 8-15 only (vms-jd-router.tf). CCD 2: talos-cp-01.
+  # CCD 3 to 6: talos-worker-01 to 04. CCD 7: JD-FS-01.
+  jd_ccd = { for n in range(8) : n => "${n * 8}-${n * 8 + 7},${n * 8 + 64}-${n * 8 + 71}" }
+
   # Default guest datastores per site.
   datastores = {
     jd    = "ssd-mixed" # ZFS raidz1 on VM pool

@@ -13,7 +13,7 @@ module "talos_cp_jd" {
   source = "./modules/talos-node"
 
   nodes = {
-    "talos-cp-01" = { mac_address = "BC:24:11:D4:F3:C1" }
+    "talos-cp-01" = { mac_address = "BC:24:11:D4:F3:C1", affinity = local.jd_ccd[2] }
   }
 
   role           = "controlplane"
@@ -31,10 +31,10 @@ module "talos_workers_jd" {
   source = "./modules/talos-node"
 
   nodes = {
-    "talos-worker-01" = { mac_address = "02:24:11:d4:f3:d1" }
-    "talos-worker-02" = { mac_address = "02:24:11:d4:f3:d2" }
-    "talos-worker-03" = { mac_address = "02:24:11:d4:f3:d3" }
-    "talos-worker-04" = { mac_address = "02:24:11:d4:f3:d4" }
+    "talos-worker-01" = { mac_address = "02:24:11:d4:f3:d1", affinity = local.jd_ccd[3] }
+    "talos-worker-02" = { mac_address = "02:24:11:d4:f3:d2", affinity = local.jd_ccd[4] }
+    "talos-worker-03" = { mac_address = "02:24:11:d4:f3:d3", affinity = local.jd_ccd[5] }
+    "talos-worker-04" = { mac_address = "02:24:11:d4:f3:d4", affinity = local.jd_ccd[6] }
   }
 
   role           = "worker"
@@ -174,6 +174,7 @@ resource "proxmox_virtual_environment_vm" "jd_dc_01" {
     type         = "host"
     architecture = "x86_64"
     cores        = 4
+    affinity     = local.jd_ccd[0]
     flags        = concat(["-nested-virt"], local.guest_cpu_flags)
   }
 
@@ -269,6 +270,7 @@ resource "proxmox_virtual_environment_vm" "jd_fs_01" {
     architecture = "x86_64"
     cores        = 8
     numa         = true
+    affinity     = local.jd_ccd[7]
     # As VM 1103: no Hyper-V or WSL2 in here, so drop the nested-paging tax.
     flags = concat(["-nested-virt"], local.guest_cpu_flags)
   }
@@ -561,6 +563,7 @@ resource "proxmox_virtual_environment_vm" "jd_torrent" {
     type         = "host"
     architecture = "x86_64"
     cores        = 8
+    affinity     = local.jd_ccd[0]
     flags        = local.guest_cpu_flags
     numa         = true
   }
@@ -657,7 +660,8 @@ resource "proxmox_virtual_environment_vm" "jd_jump" {
       "-md-clear", "-spec-ctrl", "-amd-no-ssb", "-hv-evmcs", "+aes", "-amd-ssbd",
       "-hv-tlbflush", "-ibpb", "-pcid", "+pdpe1gb", "-ssbd", "-virt-ssbd",
     ]
-    numa = true
+    numa     = true
+    affinity = local.jd_ccd[0]
   }
 
   memory {
