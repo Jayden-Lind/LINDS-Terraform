@@ -67,7 +67,7 @@ the host, not from here:
 | Pool | Topology | Notes |
 | --- | --- | --- |
 | `VM` | raidz1, 1×2TB + 2×600GB SATA SSD | `ashift=12`, `autotrim=on`. All guest disks |
-| `NAS-SSD` | raidz1, 5×4TB Samsung 870 EVO | `ashift=12`, `autotrim=off`. Only JD-DC-01's bulk zvol |
+| `NAS-SSD` | raidz1, 5×4TB Samsung 870 EVO | `ashift=12`, `autotrim=on`. Only the data disk of JD-FS-01, `vm-1113-disk-1`, with `volblocksize=32K`: a 16K block needs 6 sectors for 4 sectors of data on this raidz1 |
 | `HDD-20T` | mirror, 2×20TB Seagate Exos | `ashift=12`, `autotrim=on`. Bulk media |
 
 | Dataset | Non-inherited properties |

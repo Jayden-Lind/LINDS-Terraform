@@ -2,6 +2,9 @@ variable "nodes" {
   description = "Talos VMs to create, keyed by VM name. Values carry the pinned MAC. An installed node has a static address (talos.tf); the DHCP reservation keyed on the MAC gives the address only in maintenance mode."
   type = map(object({
     mac_address = string
+    # The host CPUs that the VM can use, for example "16-23,80-87". If it is
+    # not set, the VM can use all CPUs.
+    affinity = optional(string)
   }))
 }
 

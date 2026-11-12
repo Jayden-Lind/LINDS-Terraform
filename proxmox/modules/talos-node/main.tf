@@ -13,6 +13,7 @@ resource "proxmox_virtual_environment_vm" "this" {
     type         = "host"
     architecture = "x86_64"
     cores        = var.cores
+    affinity     = each.value.affinity
     flags        = var.cpu_flags
   }
 
