@@ -77,8 +77,8 @@ the host, not from here:
 | `VM/truenas-nas/s3` | `recordsize=1M` — backs the versitygw LXC (107), i.e. this repo's tfstate; objects are plain files |
 | `VM/truenas-nas/k8s-iscsi{,/s,/v}` | inherits — democratic-csi owns everything below |
 | `NAS-SSD` | `compression=zstd atime=off` |
-| `HDD-20T` | `mountpoint=/HDD-20T recordsize=1M compression=off atime=off primarycache=metadata logbias=throughput sync=disabled` |
-| `HDD-20T/data` | `mountpoint=/mnt/HDD recordsize=1M compression=off atime=off direct=always` |
+| `HDD-20T` | `mountpoint=/HDD-20T recordsize=1M compression=lz4 atime=off primarycache=metadata logbias=throughput sync=disabled` |
+| `HDD-20T/data` | `mountpoint=/mnt/HDD recordsize=1M compression=lz4 atime=off direct=standard primarycache=all` — clients read small parts of large records, so the ARC must keep them |
 
 ARC is capped at 64 GiB with a 16 GiB floor; vdev queue depths and dirty-data
 headroom are raised in `/etc/modprobe.d/zfs.conf`. Snapshots are sanoid's job
