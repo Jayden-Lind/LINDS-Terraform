@@ -353,6 +353,27 @@ locals {
       kind       = "FilesystemTrimConfig"
       interval   = "168h0m0s"
     },
+    # The NFS client reads ahead 128 KiB by default. A program that reads a
+    # file in small parts then sends one 128 KiB request after the other.
+    # With 16 MiB the client sends 1 MiB requests, and a sequential read
+    # from jd-proxmox-02 is about four times as fast (measured in the Plex
+    # pod: 610 MB/s to 2.4 GB/s). A random read does not start read-ahead.
+    #
+    # NFS mounts are the only devices with the name 0:* in the class bdi on
+    # these nodes. An SMB mount has the name cifs-*.
+    #
+    # Udev rules have no document of the new type in Talos v1.14, so this
+    # patch stays in the old `machine:` document. Talos applies it without
+    # a reboot, also to the mounts that exist.
+    {
+      machine = {
+        udev = {
+          rules = [
+            "SUBSYSTEM==\"bdi\", KERNEL==\"0:*\", ACTION==\"add|change\", ATTR{read_ahead_kb}=\"16384\"",
+          ]
+        }
+      }
+    },
   ]
 
   # The documents that only the control plane gets.
