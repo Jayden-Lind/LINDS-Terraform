@@ -79,16 +79,38 @@ source "proxmox-iso" "ubuntu" {
     firewall = false
   }
 
-  # Credentials come from the autoinstall user-data in ./http.
-  ssh_username = var.ssh_username
-  ssh_password = var.ssh_password
-  ssh_port     = 22
-  ssh_timeout  = "30m"
+  # The account and its key come from the autoinstall user-data in ./http.
+  # There is no password: the template permits SSH logins with a key only.
+  ssh_username         = var.ssh_username
+  ssh_private_key_file = var.ssh_private_key_file
+  ssh_port             = 22
+  ssh_timeout          = "30m"
 }
 
 build {
   name    = "ubuntu-lts"
   sources = ["source.proxmox-iso.ubuntu"]
+
+  # Hardening and trim: SSH with keys only, kernel settings, and the removal of
+  # the packages and units that a VM does not use. See the script.
+  provisioner "shell" {
+    inline = ["cloud-init status --wait || true", "mkdir -p /tmp/linds-image"]
+  }
+
+  provisioner "file" {
+    sources = [
+      "files/01-hardening.conf",
+      "files/90-common-hardening.conf",
+      "files/common-hardening-modules.conf",
+      "files/90-default-user.cfg",
+    ]
+    destination = "/tmp/linds-image/"
+  }
+
+  provisioner "shell" {
+    execute_command = "sudo sh -c '{{ .Vars }} {{ .Path }}'"
+    script          = "scripts/harden-and-trim.sh"
+  }
 
   # cloud-init must come up clean on every clone, so strip the identity the
   # build itself picked up.
@@ -103,9 +125,8 @@ build {
   # gone the moment the build ends; GRUB happens to truncate at the `;`, so the
   # dead URL never actually gets used. Do not rely on that.
   provisioner "shell" {
-    execute_command = "sudo -S sh -c '{{ .Vars }} {{ .Path }}'"
+    execute_command = "sudo sh -c '{{ .Vars }} {{ .Path }}'"
     inline = [
-      "cloud-init status --wait || true",
       "sed -i 's|^GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\"\"|' /etc/default/grub",
       "update-grub",
       # --seed as well: without it /var/lib/cloud/seed survives into the image.

@@ -88,7 +88,7 @@ variable "disk_format" {
 }
 
 ###############################################################################
-# Credentials Packer uses to talk to the guest, matching ./http/user-data
+# How Packer logs in to the guest, matching ./http/user-data
 ###############################################################################
 
 variable "ssh_username" {
@@ -97,8 +97,8 @@ variable "ssh_username" {
   default     = "jayden"
 }
 
-variable "ssh_password" {
+variable "ssh_private_key_file" {
   type        = string
-  description = "Password for ssh_username. Prefer PKR_VAR_ssh_password over a vars file."
-  sensitive   = true
+  description = "Private key of the SSH key in ./http/user-data. Packer logs in with it; the template has no password."
+  default     = "~/.ssh/id_rsa"
 }
