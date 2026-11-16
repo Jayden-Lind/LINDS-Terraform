@@ -59,8 +59,20 @@ The template VMID (`template_vm_id`, default 150) must match
 `ubuntu_template_vm_id` in `proxmox/locals.tf` — that is what cloned guests
 reference.
 
-Secrets are better passed as `PKR_VAR_proxmox_password` / `PKR_VAR_ssh_password`
-than written into the vars file.
+The Proxmox password is better passed as `PKR_VAR_proxmox_password` than
+written into the vars file. Packer logs in to the guest with an SSH key
+(`ssh_private_key_file`): the template has no password.
+
+The template is the minimal server with the kernel package for a VM
+(`linux-image-virtual`). `packer/scripts/harden-and-trim.sh` then removes the
+packages and units that a VM does not use, and installs the settings in
+`packer/files/`: SSH logins with a key only, kernel settings, a list of
+kernel modules that do not load, and `jayden` as the default account of a
+clone. LINDS-Ansible `roles/common` applies the same list and the same files
+to the hosts that it manages, so keep the two the same.
+
+Rebuilding the template does not touch existing clones. They are full clones,
+and LINDS-Ansible changes them.
 
 ### Windows Server template
 

@@ -4,7 +4,21 @@ autoinstall:
   locale: en_US.UTF-8
   refresh-installer:
     update: true
-  id: ubuntu-server-minimal
+  # The minimal server. The key is source.id: an `id` at the top level is not
+  # an autoinstall key, the installer ignored it, and the template was the
+  # full server (source.id ubuntu-server) until 2026-11.
+  source:
+    id: ubuntu-server-minimal
+    # No search for third-party drivers: a VM has only virtio devices.
+    search_drivers: false
+  # The same kernel as linux-generic, without the firmware, the microcode and
+  # the headers that only hardware needs.
+  kernel:
+    package: linux-image-virtual
+  # No kdump-tools: it keeps 512 MB of the memory of each clone for a second
+  # kernel that saves a crash dump.
+  kernel-crash-dumps:
+    enabled: false
   storage:
     swap:
       size: 0
@@ -17,7 +31,8 @@ autoinstall:
       [
         "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDPWOKxGwpEJ/BU5h71sdPWdnuTgZzx4KRlApHZpoPJUYwDQUHYCXCHsbRrgRUTOuzCJ0Z5HAkDRBUJP8duHgtW7heCv2Emb5HfIbQFierkJnaSwjT68B9JNS8z4w6nNUPViXlPn4IN/hmt2YAWts1i+7xQf0laxyZiHvqm2CQyKUpWYg5KrGgLurZdatDAfEcTgxmVB2OzEH9JREn9pW/9wYIB3dJX5Exvbq8y4ptDiTx2q42DRybHVifIKkAKxOE/pvfTIN++7IKXq6G8uWKefrHLDzdyzpXIg+yqN/uWHb0rWRVe6wmI5EwIlL0jdro/3skbw3bSORDIpZaMWZL+F18HhNW9eW7vKGK2heWzehBlUmmwXJiR3C6qmLiv+lBMvgGB/UZ4eA9x5hvVdQ8WQDJnzdjXhnsmd9yS9btGsm4Gqz+WQGYPHs2GsLMfWlY5TAxM/Qn2Q4SDj7/QHjGsGMYQ+RhHchdjEART8Tiae/+SuA0BZxVPO6QDwLPCYVs= root@jd-dev-01",
       ]
-    allow-pw: true
+    # Keys only. Packer logs in with the key (ssh_private_key_file).
+    allow-pw: false
   timezone: Australia/Melbourne
   updates: all
   packages:
@@ -40,8 +55,8 @@ autoinstall:
         groups: admin
         sudo: ALL=(ALL) NOPASSWD:ALL
         shell: /bin/bash
-        lock_passwd: false
-        passwd: $6$shjbqHnRbcK3omRe$/CP4quotG3nKjk5wUMKfwBDIVltfep.SxxsVyuNVsyg4vFzO89RH2MKJgx8sJ48iTHiYeCXt8lp.iU6r2m0wr0
+        # No password: SSH with the key, sudo without a password.
+        lock_passwd: true
         ssh_authorized_keys:
           [
             "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDPWOKxGwpEJ/BU5h71sdPWdnuTgZzx4KRlApHZpoPJUYwDQUHYCXCHsbRrgRUTOuzCJ0Z5HAkDRBUJP8duHgtW7heCv2Emb5HfIbQFierkJnaSwjT68B9JNS8z4w6nNUPViXlPn4IN/hmt2YAWts1i+7xQf0laxyZiHvqm2CQyKUpWYg5KrGgLurZdatDAfEcTgxmVB2OzEH9JREn9pW/9wYIB3dJX5Exvbq8y4ptDiTx2q42DRybHVifIKkAKxOE/pvfTIN++7IKXq6G8uWKefrHLDzdyzpXIg+yqN/uWHb0rWRVe6wmI5EwIlL0jdro/3skbw3bSORDIpZaMWZL+F18HhNW9eW7vKGK2heWzehBlUmmwXJiR3C6qmLiv+lBMvgGB/UZ4eA9x5hvVdQ8WQDJnzdjXhnsmd9yS9btGsm4Gqz+WQGYPHs2GsLMfWlY5TAxM/Qn2Q4SDj7/QHjGsGMYQ+RhHchdjEART8Tiae/+SuA0BZxVPO6QDwLPCYVs= root@jd-dev-01",
