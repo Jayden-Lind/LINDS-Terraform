@@ -11,12 +11,16 @@ autoinstall:
     id: ubuntu-server-minimal
     # No search for third-party drivers: a VM has only virtio devices.
     search_drivers: false
-  # The same kernel as linux-generic, without the firmware, the microcode and
-  # the headers that only hardware needs.
+  # The kernel package for a VM: the same kernel as linux-generic, without
+  # the firmware, the microcode and the headers that only hardware needs.
+  # The installer adds it but still installs linux-generic and the firmware
+  # (seen in a build, 2026-11). scripts/harden-and-trim.sh removes those.
   kernel:
     package: linux-image-virtual
-  # No kdump-tools: it keeps 512 MB of the memory of each clone for a second
-  # kernel that saves a crash dump.
+  # kdump-tools keeps 512 MB of the memory of each clone for a second kernel
+  # that saves a crash dump. This setting did not stop it in a build: the
+  # minimal server has the package, and it puts crashkernel= on the kernel
+  # command line. scripts/harden-and-trim.sh removes the package.
   kernel-crash-dumps:
     enabled: false
   storage:

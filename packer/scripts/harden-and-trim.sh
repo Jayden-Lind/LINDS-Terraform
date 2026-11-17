@@ -14,7 +14,8 @@ installed() {
 # Hardware services; storage that the template does not have; snap and LXD;
 # crash reports and crash dumps (kdump-tools keeps 512 MB of memory for a
 # second kernel); timers and services whose output nobody reads; the telnet
-# client; kernel trace tools.
+# client; kernel trace tools; tools that the minimal server does not have
+# (LINDS-Ansible common_tool_packages_absent).
 candidates="
   modemmanager usbmuxd bolt upower udisks2 fwupd fwupd-signed thermald
   ubuntu-drivers-common open-vm-tools
@@ -26,6 +27,7 @@ candidates="
   packagekit networkd-dispatcher
   telnet inetutils-telnet
   bpftrace bpfcc-tools trace-cmd
+  git git-man linux-perf bpftool lshw ufw iptables man-db manpages info
   linux-generic linux-image-generic linux-headers-generic linux-firmware
   intel-microcode amd64-microcode firmware-sof-signed
 "

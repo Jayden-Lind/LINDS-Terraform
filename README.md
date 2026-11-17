@@ -71,6 +71,11 @@ kernel modules that do not load, and `jayden` as the default account of a
 clone. LINDS-Ansible `roles/common` applies the same list and the same files
 to the hosts that it manages, so keep the two the same.
 
+The result has about 390 packages and uses 1 GB of its disk. It has no text
+editor, no `cron`, no `rsyslog` and no manual pages. LINDS-Ansible
+`roles/common` installs `rsyslog` and `logrotate`. Add a package to
+`packages` in `http/user-data` if every clone needs it.
+
 Rebuilding the template does not touch existing clones. They are full clones,
 and LINDS-Ansible changes them.
 
