@@ -47,6 +47,10 @@ vault_pod=(--namespace vault vault-0)
 # change. Anything else in a plan stops the deploy before it applies; apply it
 # by hand, or add a rule here if the deploy should make that change itself.
 #
+# A change to the kernel arguments or the extensions of a schematic is an
+# update in place: the provider sends the new schematic to the image factory
+# and gets a new ID. It changes nothing on a node by itself.
+#
 # The Talos VMs may only have their cdrom changed (the boot ISO a Talos bump
 # downloads). Any other in-place change to a running VM is out: a NIC change,
 # for one, hot-unplugs the NIC from the running node.
@@ -55,7 +59,7 @@ def rules: [
   {re: "^talos_machine_configuration_apply\\.(controlplane|worker|worker_linds)(\\[[0-9]+\\])?$",
    actions: [["update"]]},
   {re: "^talos_image_factory_schematic\\.this\\[\"(amd|intel)\"\\]$",
-   actions: [["create"], ["delete", "create"], ["create", "delete"]]},
+   actions: [["create"], ["update"], ["delete", "create"], ["create", "delete"]]},
   {re: "^proxmox_virtual_environment_download_file\\.talos_iso_(jd|linds)$",
    actions: [["create"], ["delete", "create"], ["create", "delete"]]},
   {re: "^module\\.talos_(cp_jd|workers_jd|workers_linds)\\.proxmox_virtual_environment_vm\\.this\\[\"[^\"]+\"\\]$",
@@ -468,6 +472,14 @@ upgrade_talos() {
   # A dry run has applied nothing, so the images come from its worker plan.
   if $dry_run; then
     images=$(jq -c '.output_changes.talos_installer_images.after // empty' "$worker_plan_json")
+    # After a schematic change the plan does not know the new images: the
+    # output is empty, or it has no value for a site. The deploy itself reads
+    # them after the apply and upgrades each node to the new schematic.
+    if [[ -n $images ]] && ! jq -e 'type == "object" and (.amd | type) == "string" and (.intel | type) == "string"' <<< "$images" > /dev/null; then
+      log "A schematic changes: the new installer images are only known after the apply. The deploy then upgrades every node to the new schematic."
+      notes+=("a schematic changes, so the deploy upgrades every node (about 1 minute each, the control plane last)")
+      return 0
+    fi
     [[ -n $images ]] || log "The new installer images are only known after an apply (a schematic change)."
   fi
   [[ -n ${images:-} ]] || images=$(tf output -json talos_installer_images)

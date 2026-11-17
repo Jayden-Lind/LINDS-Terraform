@@ -192,7 +192,13 @@ locals {
     {
       apiVersion = "v1alpha1"
       kind       = "KubeletConfig"
-      image      = "ghcr.io/siderolabs/kubelet:${local.kubernetes_version}-fat"
+      # The slim image, not `-fat`. The fat one adds a shell, socat, the
+      # Ceph, Gluster and CIFS clients and an iscsiadm wrapper, for the volume
+      # plugins that are built into the kubelet. Here every iSCSI and SMB
+      # volume is a CSI volume, and the driver's own pod logs in and mounts.
+      # The only built-in volumes are three NFS ones, and the slim image has
+      # nfs-common for those.
+      image = "ghcr.io/siderolabs/kubelet:${local.kubernetes_version}"
       # `config` is the KubeletConfiguration (the old machine.kubelet.extraConfig).
       config = {
         # Pull images in parallel instead of one at a time per node; a

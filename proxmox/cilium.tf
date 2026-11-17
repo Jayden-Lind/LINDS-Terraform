@@ -123,9 +123,14 @@ locals {
     # "Socket LB Coverage: Hostns-only".
     #
     # To use Gateway API later: install its CRDs first, then expect that
-    # switch to come back with it. L7 and FQDN policies do not need it - the
-    # L7 proxy stays enabled (chart default), and with no such policy in the
-    # cluster no Envoy process is even running on the nodes.
+    # switch to come back with it.
+    #
+    # The L7 proxy is off. With it on (the chart default) every agent runs an
+    # embedded Envoy (`cilium-dbg status`: "Envoy: embedded", listening on
+    # :9964) even with no policy that uses it: the four CiliumNetworkPolicies
+    # are L3/L4 only. A policy with `toFQDNs`, `rules.dns` or `rules.http`
+    # does nothing while this is false: set it to true before you add one.
+    l7Proxy = false
     bgpControlPlane = {
       enabled = true
     }
