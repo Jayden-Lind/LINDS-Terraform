@@ -12,6 +12,8 @@ installed() {
 
 # ----- Packages that a VM does not use --------------------------------------
 # Hardware services; storage that the template does not have; snap and LXD;
+# polkit and cron (the administrator uses sudo, and each periodic job has a
+# systemd timer);
 # crash reports and crash dumps (kdump-tools keeps 512 MB of memory for a
 # second kernel); timers and services whose output nobody reads; the telnet
 # client; kernel trace tools; tools that the minimal server does not have
@@ -21,6 +23,7 @@ candidates="
   ubuntu-drivers-common open-vm-tools
   multipath-tools open-iscsi mdadm bcache-tools btrfs-progs xfsprogs ntfs-3g
   snapd lxd-installer lxd-agent-loader
+  polkitd cron cron-daemon-common
   apport apport-symptoms apport-core-dump-handler python3-apport
   kdump-tools kexec-tools makedumpfile
   sysstat landscape-common motd-news-config update-notifier-common sos
