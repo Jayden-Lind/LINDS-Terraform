@@ -91,6 +91,13 @@ locals {
     "random.trust_bootloader=on",
     # Covers early boot only: once Talos is up it sets kernel.panic to 10.
     "panic=1",
+
+    # ===== Talos console =====
+    # No dashboard on the VM console. Nobody watches it, and it was about two
+    # thirds of the CPU time of Talos's own services on each node. The
+    # Proxmox console shows the kernel log instead; `talosctl dashboard`
+    # from a workstation still works.
+    "talos.dashboard.disabled=1",
   ]
 
   talos_kernel_args = {
@@ -98,13 +105,23 @@ locals {
     intel = local.talos_kernel_args_guest
   }
 
+  # Only what something uses:
+  #   iscsi-tools       iscsid and iscsiadm for democratic-csi (LINDS-Kubernetes
+  #                     democratic-csi/values.yaml runs the host's iscsiadm).
+  #   qemu-guest-agent  the Proxmox guest agent (modules/talos-node, agent).
+  #
+  # Removed 2026-11, and what would need them again:
+  #   nfs-utils         rpcbind and rpc.statd, for NFS version 3 locks. They
+  #                     listened on every node. All mounts are NFS 4.2, which
+  #                     needs neither: with both stopped on a node, a new pod
+  #                     mounted two exports. An NFS 3 mount now needs `nolock`.
+  #   nfsd              the kernel NFS server. No node exports anything.
+  #   crun              a second container runtime. No RuntimeClass uses it.
+  #   util-linux-tools  nsenter, fstrim, blkid on the host. The CSI drivers
+  #                     use the tools in their own containers.
   talos_system_extensions = [
-    "siderolabs/crun",
     "siderolabs/iscsi-tools",
-    "siderolabs/nfs-utils",
-    "siderolabs/nfsd",
     "siderolabs/qemu-guest-agent",
-    "siderolabs/util-linux-tools",
   ]
 }
 
