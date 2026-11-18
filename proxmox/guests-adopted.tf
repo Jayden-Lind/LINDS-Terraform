@@ -344,6 +344,7 @@ resource "proxmox_virtual_environment_vm" "linds_truenas" {
   timeout_stop_vm     = 300
   vm_id               = 103
   cpu {
+    affinity   = local.linds_numa[1]
     cores      = 4
     flags      = []
     hotplugged = 0

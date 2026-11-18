@@ -75,13 +75,15 @@ resource "proxmox_virtual_environment_vm" "linds_router" {
     timeout = "5m"
   }
 
-  # LINDS-VyOS's four cores, no pinning (it had none). The flags are the
-  # fleet's: the Talos workers on this host run with the same list.
+  # Four cores on NUMA node 0, where the two NICs of the host are
+  # (local.linds_numa in locals.tf). The flags are the fleet's: the Talos
+  # workers on this host run with the same list.
   cpu {
     type         = "host"
     architecture = "x86_64"
     cores        = 4
     flags        = local.guest_cpu_flags
+    affinity     = local.linds_numa[0]
   }
 
   # 6 GiB against VyOS's 4, as JD-Router-01: this router runs Suricata, which
