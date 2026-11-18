@@ -19,8 +19,8 @@ module "talos_workers_linds" {
   }
 
   nodes = {
-    "talos-linds-worker-01" = { mac_address = "02:24:11:d4:f3:e1" }
-    "talos-linds-worker-02" = { mac_address = "02:24:11:d4:f3:e2" }
+    "talos-linds-worker-01" = { mac_address = "02:24:11:d4:f3:e1", affinity = local.linds_numa[0] }
+    "talos-linds-worker-02" = { mac_address = "02:24:11:d4:f3:e2", affinity = local.linds_numa[0] }
   }
 
   role           = "worker"
@@ -28,7 +28,7 @@ module "talos_workers_linds" {
   datastore_id   = local.datastores.linds
   cores          = 4
   memory         = 16384
-  cpu_flags      = local.talos_cpu_flags
+  cpu_flags      = local.guest_cpu_flags
   vlan_id        = 300
   network_queues = 4
   cdrom_file_id  = proxmox_virtual_environment_download_file.talos_iso_linds.id
@@ -43,6 +43,7 @@ resource "proxmox_virtual_environment_vm" "linds_plex" {
     type         = "host"
     architecture = "x86_64"
     cores        = 4
+    affinity     = local.linds_numa[1]
   }
 
   memory {
@@ -74,9 +75,12 @@ resource "proxmox_virtual_environment_vm" "linds_plex" {
     ssd          = true
   }
 
+  # One queue pair for each vCPU. Without `queues` the NIC has one pair, and
+  # one vCPU handles all packets of the VM.
   network_device {
     bridge  = "vmbr0"
     model   = "virtio"
+    queues  = 4
     vlan_id = 300
   }
 
@@ -94,6 +98,7 @@ resource "proxmox_virtual_environment_vm" "linds_torrent" {
     type         = "host"
     architecture = "x86_64"
     cores        = 4
+    affinity     = local.linds_numa[0]
   }
 
   memory {
@@ -135,6 +140,7 @@ resource "proxmox_virtual_environment_vm" "linds_torrent" {
   network_device {
     bridge  = "vmbr0"
     model   = "virtio"
+    queues  = 4
     vlan_id = 36
   }
 
@@ -171,10 +177,19 @@ resource "proxmox_virtual_environment_vm" "linds_dc2" {
     enabled = true
   }
 
+  # -nested-virt hides VT-x from the guest. With VT-x, Windows Server 2025
+  # starts its own hypervisor for virtualization-based security, and each
+  # Windows kernel entry then goes through two hypervisors. Read on
+  # 2026-11-18: this idle VM used 0.42 of a CPU core with thousands of nested
+  # VM entries each second; the same role at JD (no VT-x) used 0.04. Nothing in
+  # this VM uses Hyper-V or WSL2. Only this one flag: on an Intel host Proxmox
+  # adds hv_evmcs itself, and the fleet list (-hv-evmcs) contradicts that.
   cpu {
     type         = "host"
     architecture = "x86_64"
     cores        = 4
+    flags        = ["-nested-virt"]
+    affinity     = local.linds_numa[1]
   }
 
   memory {
@@ -233,6 +248,7 @@ resource "proxmox_virtual_environment_vm" "linds_dc2" {
   network_device {
     bridge  = "vmbr0"
     model   = "virtio"
+    queues  = 4
     vlan_id = 300
   }
 
@@ -258,10 +274,19 @@ resource "proxmox_virtual_environment_vm" "linds_dc" {
     enabled = true
   }
 
+  # -nested-virt hides VT-x from the guest. With VT-x, Windows Server 2025
+  # starts its own hypervisor for virtualization-based security, and each
+  # Windows kernel entry then goes through two hypervisors. Read on
+  # 2026-11-18: this idle VM used 0.63 of a CPU core with thousands of nested
+  # VM entries each second; the same role at JD (no VT-x) used 0.07. Nothing in
+  # this VM uses Hyper-V or WSL2. Only this one flag: on an Intel host Proxmox
+  # adds hv_evmcs itself, and the fleet list (-hv-evmcs) contradicts that.
   cpu {
     type         = "host"
     architecture = "x86_64"
     cores        = 8
+    flags        = ["-nested-virt"]
+    affinity     = local.linds_numa[1]
   }
 
   memory {
@@ -320,6 +345,7 @@ resource "proxmox_virtual_environment_vm" "linds_dc" {
   network_device {
     bridge  = "vmbr0"
     model   = "virtio"
+    queues  = 8
     vlan_id = 300
   }
 

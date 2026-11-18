@@ -21,7 +21,7 @@ module "talos_cp_jd" {
   datastore_id   = local.datastores.jd
   cores          = 8
   memory         = 16384
-  cpu_flags      = local.talos_cpu_flags
+  cpu_flags      = local.guest_cpu_flags
   vlan_id        = 53
   network_queues = 8
   cdrom_file_id  = proxmox_virtual_environment_download_file.talos_iso_jd.id
@@ -42,7 +42,7 @@ module "talos_workers_jd" {
   datastore_id   = local.datastores.jd
   cores          = 8
   memory         = 16384
-  cpu_flags      = local.talos_cpu_flags
+  cpu_flags      = local.guest_cpu_flags
   vlan_id        = 53
   network_queues = 8
   cdrom_file_id  = proxmox_virtual_environment_download_file.talos_iso_jd.id
@@ -587,13 +587,12 @@ resource "proxmox_virtual_environment_vm" "jd_torrent" {
     interface    = "scsi0"
     size         = 16
     cache        = "none"
-    # As live (2026-11-07): discard=ignore, ssd=0. So guest TRIM does not reach
-    # the zvol, and deleted torrent data is not freed. To change that, set
-    # discard = "on" and ssd = true, as the other guests on ssd-mixed have, and
-    # apply. The apply reboots the VM (reboot_after_update is the default).
-    discard  = "ignore"
+    # discard and ssd as the other guests on ssd-mixed have, so that the
+    # weekly fstrim of the guest frees space on the zvol. Until 2026-11-18
+    # this disk had discard=ignore and ssd=0.
+    discard  = "on"
     iothread = true
-    ssd      = false
+    ssd      = true
   }
 
   clone {
@@ -658,7 +657,7 @@ resource "proxmox_virtual_environment_vm" "jd_jump" {
     cores        = 8
     flags = [
       "-md-clear", "-spec-ctrl", "-amd-no-ssb", "-hv-evmcs", "+aes", "-amd-ssbd",
-      "-hv-tlbflush", "-ibpb", "-pcid", "+pdpe1gb", "-ssbd", "-virt-ssbd",
+      "-hv-tlbflush", "-ibpb", "+pcid", "+pdpe1gb", "-ssbd", "-virt-ssbd",
     ]
     numa     = true
     affinity = local.jd_ccd[0]
