@@ -259,9 +259,9 @@ locals {
           annotations = {
             "cert-manager.io/cluster-issuer" = "linds-ca"
             # Kyverno adds these to every other Ingress (server-auth EKU so
-            # iOS/macOS accept the leaf, and an ECDSA P-384 key) but skips kube-system,
-            # so set them
-            # here by hand. Values match kyverno/ingress-cert-server-auth.yaml.
+            # iOS/macOS accept the leaf, and an ECDSA P-384 key) but skips
+            # kube-system, so set them here by hand. Values match
+            # kyverno/ingress-cert-server-auth.yaml.
             "cert-manager.io/usages"                = "digital signature, key encipherment, server auth"
             "cert-manager.io/duration"              = "2160h"
             "cert-manager.io/private-key-algorithm" = "ECDSA"
