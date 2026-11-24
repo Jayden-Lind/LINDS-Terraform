@@ -325,7 +325,9 @@ plan_targets() { # LABEL TARGET...
 }
 
 apply_plan() { # LABEL
-  [[ -n $(jq -r "$list_changes" "$plan_json") ]] || return 0
+  # A plan with no change to a resource is applied only if it holds new
+  # credentials outputs (see run).
+  [[ -n $(jq -r "$list_changes" "$plan_json") || ${new_credentials:-false} == true ]] || return 0
   if $dry_run; then
     [[ -z $changes ]] || did+=("$1")
     return 0
@@ -907,14 +909,23 @@ run() {
   # and Helm providers will find: it shows the Cilium release as a new
   # resource. So the new credentials are applied here, before a later step
   # plans with those providers.
-  plan_targets "control plane config" talos_machine_configuration_apply.controlplane talos_cluster_kubeconfig.this
+  #
+  # The talosconfig data source is a target for the output talosconfig, which
+  # talosctl uses here. A targeted apply updates an output only if the plan
+  # holds all that the output reads. Without this target, the output kept the
+  # old certificate after a renewal.
+  plan_targets "control plane config" talos_machine_configuration_apply.controlplane talos_cluster_kubeconfig.this \
+    data.talos_client_configuration.this
   new_kubeconfig=$(jq -r '[(.resource_changes // [])[]
     | select(.address == "talos_cluster_kubeconfig.this" and .change.actions != ["no-op"])] | length > 0' "$plan_json")
+  new_credentials=$(jq -r '[(.output_changes // {}) | to_entries[]
+    | select((.key == "talosconfig" or .key == "kubeconfig") and .value.actions != ["no-op"])] | length > 0' "$plan_json")
   apply_plan "control plane config"
   if ! $dry_run; then
-    [[ $new_kubeconfig != true ]] || read_credentials
+    [[ $new_credentials != true ]] || read_credentials
     wait_healthy "after the control plane config"
   fi
+  new_credentials=false
 
   plan_targets "worker configs" talos_machine_configuration_apply.worker talos_machine_configuration_apply.worker_linds
   worker_plan_json=$plan_json
