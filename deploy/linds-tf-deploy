@@ -51,6 +51,13 @@ vault_pod=(--namespace vault vault-0)
 # update in place: the provider sends the new schematic to the image factory
 # and gets a new ID. It changes nothing on a node by itself.
 #
+# The Talos provider makes a new admin client certificate when the old one has
+# less than a month left. That is an update of client_configuration in
+# talos_machine_secrets. The secrets of the cluster (machine_secrets: the CAs
+# and the tokens) must never change here, so the rule allows that one
+# attribute only. A new or replaced talos_machine_secrets still stops the
+# deploy.
+#
 # The Talos VMs may only have their cdrom changed (the boot ISO a Talos bump
 # downloads). Any other in-place change to a running VM is out: a NIC change,
 # for one, hot-unplugs the NIC from the running node.
@@ -58,6 +65,8 @@ read -r -d '' guard <<'JQ' || true
 def rules: [
   {re: "^talos_machine_configuration_apply\\.(controlplane|worker|worker_linds)(\\[[0-9]+\\])?$",
    actions: [["update"]]},
+  {re: "^talos_machine_secrets\\.this$",
+   actions: [["update"]], only: ["client_configuration"]},
   {re: "^talos_image_factory_schematic\\.this\\[\"(amd|intel)\"\\]$",
    actions: [["create"], ["update"], ["delete", "create"], ["create", "delete"]]},
   {re: "^proxmox_virtual_environment_download_file\\.talos_iso_(jd|linds)$",

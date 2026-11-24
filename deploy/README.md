@@ -24,9 +24,16 @@ Each step is a targeted plan, saved and checked before it is applied. A plan
 that holds anything outside a short allowlist (the `guard` program at the top
 of the script) stops the deploy before it applies anything. The allowlist
 covers the Talos configs, schematics and boot ISOs, the Talos VMs' cdrom and
-nothing else on them, and the Cilium release. A Talos change that would
-replace a VM, a NIC change on a running node, or a new
-`talos_machine_secrets` all stop the deploy.
+nothing else on them, the Cilium release, and the renewal of the Talos admin
+client certificate. A Talos change that would replace a VM, a NIC change on a
+running node, or a new `talos_machine_secrets` all stop the deploy.
+
+**NOTE:** The Talos admin client certificate is valid for one year. In its
+last month, the Talos provider plans a new one (`client_configuration` of
+`talos_machine_secrets`), and the next deploy applies it. The secrets of the
+cluster do not change, and no node restarts. A `talosconfig` file that you
+saved before the renewal stops at the end date of the old certificate. Get a
+new one with `terraform -chdir=proxmox output -raw talosconfig`.
 
 Before you merge, each pull request shows what the merge does. See
 [Previews of pull requests](#previews-of-pull-requests).
