@@ -28,12 +28,16 @@ nothing else on them, the Cilium release, and the renewal of the Talos admin
 client certificate. A Talos change that would replace a VM, a NIC change on a
 running node, or a new `talos_machine_secrets` all stop the deploy.
 
-**NOTE:** The Talos admin client certificate is valid for one year. In its
-last month, the Talos provider plans a new one (`client_configuration` of
-`talos_machine_secrets`), and the next deploy applies it. The secrets of the
-cluster do not change, and no node restarts. A `talosconfig` file that you
-saved before the renewal stops at the end date of the old certificate. Get a
-new one with `terraform -chdir=proxmox output -raw talosconfig`.
+**NOTE:** The Talos admin client certificate and the kubeconfig are valid for
+one year. In their last month, the Talos provider plans new ones
+(`client_configuration` of `talos_machine_secrets`, and
+`talos_cluster_kubeconfig`). The next deploy applies them in its first step,
+with the control plane config. The secrets of the cluster do not change, and
+no node restarts. A `talosconfig` or `kubeconfig` file that you saved before
+the renewal stops at the end date of the old certificate. Get new ones with
+`terraform -chdir=proxmox output -raw talosconfig` and `... -raw kubeconfig`.
+While new credentials wait, a dry run or a preview does not plan the Cilium
+release: a plan cannot use a kubeconfig that does not exist yet.
 
 Before you merge, each pull request shows what the merge does. See
 [Previews of pull requests](#previews-of-pull-requests).
