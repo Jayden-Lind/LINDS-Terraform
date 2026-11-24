@@ -51,6 +51,14 @@ vault_pod=(--namespace vault vault-0)
 # update in place: the provider sends the new schematic to the image factory
 # and gets a new ID. It changes nothing on a node by itself.
 #
+# The Talos provider makes a new admin client certificate when the old one has
+# less than a month left. That is an update of client_configuration in
+# talos_machine_secrets. The secrets of the cluster (machine_secrets: the CAs
+# and the tokens) must never change here, so the rule allows that one
+# attribute only. A new or replaced talos_machine_secrets still stops the
+# deploy. talos_machine_bootstrap keeps a copy of client_configuration: its
+# update writes the copy to the state and sends nothing to a node.
+#
 # The Talos VMs may only have their cdrom changed (the boot ISO a Talos bump
 # downloads). Any other in-place change to a running VM is out: a NIC change,
 # for one, hot-unplugs the NIC from the running node.
@@ -58,6 +66,8 @@ read -r -d '' guard <<'JQ' || true
 def rules: [
   {re: "^talos_machine_configuration_apply\\.(controlplane|worker|worker_linds)(\\[[0-9]+\\])?$",
    actions: [["update"]]},
+  {re: "^talos_machine_(secrets|bootstrap)\\.this$",
+   actions: [["update"]], only: ["client_configuration"]},
   {re: "^talos_image_factory_schematic\\.this\\[\"(amd|intel)\"\\]$",
    actions: [["create"], ["update"], ["delete", "create"], ["create", "delete"]]},
   {re: "^proxmox_virtual_environment_download_file\\.talos_iso_(jd|linds)$",
@@ -328,6 +338,19 @@ apply_plan() { # LABEL
 
 # --- steps ------------------------------------------------------------------
 
+# The talosconfig and the kubeconfig of the Terraform state, for talosctl and
+# kubectl.
+read_credentials() {
+  stage="reading the cluster credentials"
+  (
+    umask 077
+    tf output -raw talosconfig > "$run_dir/talosconfig"
+    tf output -raw kubeconfig > "$state_dir/kubeconfig.new"
+  )
+  mv -f -- "$state_dir/kubeconfig.new" "$state_dir/kubeconfig"
+  export TALOSCONFIG=$run_dir/talosconfig KUBECONFIG=$state_dir/kubeconfig
+}
+
 preflight() {
   local tool cp_line cp_version problems
   stage="checking the tools"
@@ -346,14 +369,7 @@ preflight() {
     fail "terraform init failed"
   fi
 
-  stage="reading the cluster credentials"
-  (
-    umask 077
-    tf output -raw talosconfig > "$run_dir/talosconfig"
-    tf output -raw kubeconfig > "$state_dir/kubeconfig.new"
-  )
-  mv -f -- "$state_dir/kubeconfig.new" "$state_dir/kubeconfig"
-  export TALOSCONFIG=$run_dir/talosconfig KUBECONFIG=$state_dir/kubeconfig
+  read_credentials
 
   stage="checking the cluster"
   nodes=$(node_list)
@@ -884,19 +900,36 @@ run() {
 
   # Control plane first: on a Kubernetes bump, the kubelets must not run ahead
   # of the API server.
-  plan_targets "control plane config" talos_machine_configuration_apply.controlplane
+  #
+  # The kubeconfig is a target of this step too. The Talos provider makes a new
+  # admin client certificate and a new kubeconfig in the last month of the old
+  # ones. A plan that holds a new kubeconfig cannot tell what the Kubernetes
+  # and Helm providers will find: it shows the Cilium release as a new
+  # resource. So the new credentials are applied here, before a later step
+  # plans with those providers.
+  plan_targets "control plane config" talos_machine_configuration_apply.controlplane talos_cluster_kubeconfig.this
+  new_kubeconfig=$(jq -r '[(.resource_changes // [])[]
+    | select(.address == "talos_cluster_kubeconfig.this" and .change.actions != ["no-op"])] | length > 0' "$plan_json")
   apply_plan "control plane config"
-  $dry_run || wait_healthy "after the control plane config"
+  if ! $dry_run; then
+    [[ $new_kubeconfig != true ]] || read_credentials
+    wait_healthy "after the control plane config"
+  fi
 
   plan_targets "worker configs" talos_machine_configuration_apply.worker talos_machine_configuration_apply.worker_linds
   worker_plan_json=$plan_json
   apply_plan "worker configs"
   $dry_run || wait_healthy "after the worker configs"
 
-  deploy_cilium
+  if $dry_run && [[ $new_kubeconfig == true ]]; then
+    log "A new kubeconfig waits, and the deploy applies it first. A dry run cannot plan the Cilium release or the rest of proxmox/ before that."
+    notes+=("the Cilium release and the changes left for a manual apply are not planned: a new kubeconfig comes first")
+  else
+    deploy_cilium
+  fi
   upgrade_talos
   check_vault
-  report_untargeted
+  $dry_run && [[ $new_kubeconfig == true ]] || report_untargeted
 
   if ((${#did[@]})); then
     summary="Deployed ${sha:0:7}: $(join "${did[@]}")"
